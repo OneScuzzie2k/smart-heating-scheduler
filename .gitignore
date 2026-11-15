@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+.devdeps/
+.ha-check/
+.coverage
+htmlcov/
+dist/
+.storage/
+*.zip

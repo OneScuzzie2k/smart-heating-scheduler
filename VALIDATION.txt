@@ -1,0 +1,50 @@
+Phase 3 development candidate 0.3.0.dev1 - 15 November 2026
+
+Passed locally:
+- 49 standalone engine/controller/storage/policy tests on Python 3.13.12.
+- 23 real Home Assistant 2026.11.1 API/runtime tests on workspace-local Python
+  3.14.10, using simulated entities only; no server bootstrap or live HA link.
+- 23 frontend model/DOM tests on Node 25.9.0.
+- Ruff checks, formatting and Python compilation.
+- JSON/translation consistency, standalone preview and archive integrity checks.
+
+Behavior covered:
+- Schedule validation, Fahrenheit, DST gaps/folds, week wrap, atomic saves,
+  concurrent/stale edits, persistent manual/off holds and zone independence.
+- Presence any/all/unknown mappings, departure/return/grace state, persisted
+  transition deadlines, forced presence expiry and occupied window floors.
+- Holiday priority/off preservation, removal of superseded holds, blocked or
+  acknowledged exceptions and original absolute deadlines.
+- Built-in boost preview, command contexts, stop/expiry/restart, explicit Off,
+  Off applied while HA was offline, and bounded unconfirmed command attempts.
+- Awaited external start/cancel, no external commands in observe only,
+  persistence across offline expiry, exact completion event filtering,
+  active/paused/unknown timer guards and unresolved restoration inhibition.
+- Admin enforcement, permission-filtered subscriptions, capability flags,
+  policy revisions, concurrent boost starts, storage failure and disposal.
+- Card boost controls, holiday save/cancel/exception, demo expiry/current-period
+  return, presence overrides/entity editing, policy draft retention, DST input
+  rejection, schedule editing/copying, escaping and readonly controls.
+
+Manual Chrome checks on the actual compiled component:
+- All four views: no horizontal overflow at 320, 390, 768, 1024 and 1440 CSS px.
+- Additional mobile holiday save at 360 px; light Automation view at 390 px.
+- Mobile boost-adapter duration save, boost start, countdown, stop/expiry and
+  resumption of current schedule rather than a saved previous period.
+- Read visible DOM state and screenshots; viewport override reset afterward.
+- Captured phase-3-desktop.jpg; local preview remains available for user testing.
+
+Environment-only permission:
+Async tests run outside the restricted network sandbox because Windows
+asyncio creates an internal loopback socket. Tests do not contact live HA,
+GitHub or physical heating. No PATH/registry changes or live configuration
+changes were performed. No remote CI run or publication has occurred.
+
+Still required before a live/release claim:
+Full HA bootstrap, flow manager/platform lifecycle, supported Linux install,
+hassfest, physical receiver and wall-control acceptance, actual external
+script/completion-event contract, accessibility/screen readers/200% zoom,
+broader HA themes, translations and HACS/licence/repository release metadata.
+Installation defaults/inheritance, bulk holiday scope, display sensors,
+import/export and richer return/manual-off policies are follow-up features.
+Current smart controls are independent per zone; see docs/CONTROL_POLICIES.md.

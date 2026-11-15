@@ -1,0 +1,574 @@
+"""Real HA objects with local simulated entities; never connect to a server.
+
+Run with Python >=3.14.2 and homeassistant==2026.11.1 installed:
+python -m unittest tests.ha.test_runtime -v
+"""
+
+import json
+import tempfile
+import unittest
+from pathlib import Path
+from types import MappingProxyType, SimpleNamespace
+from unittest.mock import AsyncMock, patch
+
+try:
+    from homeassistant.config_entries import ConfigEntries, ConfigEntry
+    from homeassistant.core import Context, HomeAssistant
+    from homeassistant.exceptions import Unauthorized
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import entity_registry as er
+except ImportError as error:
+    raise unittest.SkipTest("Install the target Home Assistant runtime for HA tests") from error
+
+from custom_components.smart_heating_scheduler import websocket as card_api
+from custom_components.smart_heating_scheduler.config_flow import (
+    SchedulerConfigFlow,
+    ZoneSubentryFlow,
+    validate_zone,
+)
+from custom_components.smart_heating_scheduler.const import DOMAIN
+from custom_components.smart_heating_scheduler.engine import ValidationError
+from custom_components.smart_heating_scheduler.runtime import Runtime, async_register_services
+from custom_components.smart_heating_scheduler.sensor import async_setup_entry as setup_sensors
+
+
+class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_card_boost_capability_tracks_availability_and_selected_owner(self):
+        await self.configure_builtin()
+        connection, _ = self.connection()
+        self.assertTrue(
+            card_api.dashboard(self.hass, self.entry, connection.user)["zones"][0]["boost"][
+                "can_start"
+            ]
+        )
+        self.hass.states.async_set("climate.test_zone", "unavailable", self.attrs)
+        self.assertFalse(
+            card_api.dashboard(self.hass, self.entry, connection.user)["zones"][0]["boost"][
+                "can_start"
+            ]
+        )
+        self.hass.states.async_set("climate.test_zone", "heat", self.attrs)
+        p = self.runtime.smart_record("zone_a")["policy"]
+        p["boost_owner"] = "none"
+        await self.runtime.async_control_action("policy", "zone_a", {"policy": p, "revision": 2})
+        self.assertFalse(
+            card_api.dashboard(self.hass, self.entry, connection.user)["zones"][0]["boost"][
+                "can_start"
+            ]
+        )
+
+    async def test_off_while_controller_was_offline_does_not_resurrect_boost(self):
+        self.simulated_receiver()
+        await self.configure_builtin()
+        await self.enable_control()
+        await self.runtime.async_control_action("boost_start", "zone_a", {"target": 23})
+        self.runtime.close()
+        self.hass.states.async_set("climate.test_zone", "off", self.attrs)
+        self.calls.clear()
+        self.runtime = Runtime(self.hass, self.entry)
+        self.entry.runtime_data = self.runtime
+        await self.runtime.async_setup()
+        self.assertIsNone(self.runtime.smart_record("zone_a")["boost"])
+        self.assertEqual(self.hass.states.get("climate.test_zone").state, "off")
+        self.assertEqual(self.calls, [])
+
+    async def test_filtered_external_completion_releases_only_matching_idle_owner(self):
+        await self.runtime.async_setup()
+        p = self.runtime.smart_record("zone_a")["policy"]
+        p.update(
+            completion_event="test_boost_finished",
+            completion_field="zone",
+            completion_value="test_zone",
+        )
+        await self.runtime.async_control_action("policy", "zone_a", {"policy": p, "revision": 1})
+        self.hass.states.async_set("timer.test_boost", "active")
+        await self.runtime.async_evaluate()
+        self.hass.bus.async_fire("test_boost_finished", {"zone": "test_zone"})
+        await self.hass.async_block_till_done(wait_background_tasks=True)
+        self.assertEqual(self.runtime.status["zone_a"]["source"], "external_boost")
+        self.hass.states.async_set("timer.test_boost", "idle")
+        await self.runtime.async_evaluate()
+        self.hass.bus.async_fire("test_boost_finished", {"zone": "different"})
+        await self.hass.async_block_till_done(wait_background_tasks=True)
+        self.assertEqual(self.runtime.status["zone_a"]["source"], "boost_handover")
+        self.hass.bus.async_fire("test_boost_finished", {"zone": "test_zone"})
+        await self.hass.async_block_till_done(wait_background_tasks=True)
+        self.assertEqual(self.runtime.status["zone_a"]["source"], "schedule")
+        self.assertEqual(self.calls, [])
+
+    async def test_external_ownership_survives_restart_when_timer_ended_offline(self):
+        await self.runtime.async_setup()
+        self.hass.states.async_set("timer.test_boost", "active")
+        await self.runtime.async_evaluate()
+        self.runtime.close()
+        self.hass.states.async_set("timer.test_boost", "idle")
+        self.runtime = Runtime(self.hass, self.entry)
+        self.entry.runtime_data = self.runtime
+        await self.runtime.async_setup()
+        self.assertEqual(self.runtime.status["zone_a"]["source"], "boost_handover")
+        self.assertEqual(self.calls, [])
+
+    async def test_physical_off_cancels_builtin_boost_and_stays_off(self):
+        self.simulated_receiver()
+        await self.configure_builtin()
+        await self.enable_control()
+        await self.runtime.async_control_action("boost_start", "zone_a", {"target": 23})
+        await self.hass.async_block_till_done(wait_background_tasks=True)
+        self.hass.states.async_set("climate.test_zone", "off", self.attrs)
+        await self.runtime.async_evaluate()
+        self.assertIsNone(self.runtime.smart_record("zone_a")["boost"])
+        self.assertEqual(self.runtime.status["zone_a"]["source"], "manual_off")
+        self.assertEqual(self.hass.states.get("climate.test_zone").state, "off")
+
+    async def test_simultaneous_boost_starts_are_serialized(self):
+        import asyncio
+
+        await self.configure_builtin()
+        results = await asyncio.gather(
+            self.runtime.async_control_action("boost_start", "zone_a", {"target": 23}),
+            self.runtime.async_control_action("boost_start", "zone_a", {"target": 24}),
+            return_exceptions=True,
+        )
+        self.assertEqual(sum(isinstance(r, ValidationError) for r in results), 1)
+        self.assertIn(self.runtime.smart_record("zone_a")["boost"]["target"], (23, 24))
+        self.assertEqual(self.calls, [])
+
+    async def test_policy_revision_rejects_stale_editor_and_storage_failure_blocks_commands(self):
+        await self.configure_builtin()
+        p = self.runtime.smart_record("zone_a")["policy"]
+        with self.assertRaises(ValidationError):
+            await self.runtime.async_control_action(
+                "policy", "zone_a", {"policy": p, "revision": 1}
+            )
+        original = self.runtime.repository.snapshot()
+        with patch.object(
+            self.runtime.repository._persistence, "async_save", side_effect=OSError("test failure")
+        ):
+            with self.assertRaises(OSError):
+                await self.runtime.async_control_action("boost_start", "zone_a", {"target": 23})
+        self.assertEqual(self.runtime.repository.snapshot(), original)
+        self.assertEqual(self.calls, [])
+
+    async def configure_builtin(self):
+        await self.runtime.async_setup()
+        policy = self.runtime.smart_record("zone_a")["policy"]
+        policy.update(boost_owner="builtin", timer="", boost_target=23)
+        await self.runtime.async_control_action(
+            "policy",
+            "zone_a",
+            {"policy": policy, "revision": self.runtime.smart_record("zone_a")["policy_revision"]},
+        )
+
+    async def enable_control(self):
+        await self.runtime.async_control_action(
+            "mode", "zone_a", {"enabled": True, "acknowledgement": "ENABLE HEATING CONTROL"}
+        )
+
+    def simulated_receiver(self):
+        async def apply(call):
+            self.calls.append(call)
+            current = self.hass.states.get("climate.test_zone")
+            attrs = dict(current.attributes)
+            mode = current.state
+            if call.service == "set_temperature":
+                attrs["temperature"] = call.data["temperature"]
+            else:
+                mode = call.data["hvac_mode"]
+            self.hass.states.async_set("climate.test_zone", mode, attrs, context=call.context)
+
+        self.hass.services.async_register("climate", "set_temperature", apply)
+        self.hass.services.async_register("climate", "set_hvac_mode", apply)
+
+    async def test_smart_boost_preview_persists_original_deadline_and_never_writes(self):
+        await self.configure_builtin()
+        await self.runtime.async_control_action(
+            "boost_start", "zone_a", {"minutes": 30, "target": 23}
+        )
+        self.assertEqual(self.runtime.status["zone_a"]["source"], "boost")
+        until = self.runtime.smart_record("zone_a")["boost"]["until"]
+        await self.runtime.async_evaluate()
+        self.assertEqual(self.runtime.smart_record("zone_a")["boost"]["until"], until)
+        self.assertEqual(self.calls, [])
+        await self.runtime.async_control_action("boost_cancel", "zone_a", {})
+        self.assertEqual(self.runtime.status["zone_a"]["source"], "schedule")
+
+    async def test_builtin_writer_own_context_does_not_create_manual_hold(self):
+        self.simulated_receiver()
+        await self.configure_builtin()
+        await self.enable_control()
+        await self.runtime.async_control_action(
+            "boost_start", "zone_a", {"target": 23, "minutes": 30}
+        )
+        await self.hass.async_block_till_done(wait_background_tasks=True)
+        self.assertEqual(self.hass.states.get("climate.test_zone").attributes["temperature"], 23)
+        self.assertIsNone(
+            self.runtime.repository.read("zone_a", self.runtime.zones["zone_a"].limits)[1]
+        )
+        await self.runtime.async_control_action("boost_cancel", "zone_a", {})
+        from datetime import timedelta
+
+        from homeassistant.util import dt as dt_util
+
+        with patch(
+            "custom_components.smart_heating_scheduler.runtime.dt_util.utcnow",
+            return_value=dt_util.utcnow() + timedelta(seconds=6),
+        ):
+            await self.runtime.async_evaluate()
+        self.assertEqual(self.hass.states.get("climate.test_zone").attributes["temperature"], 20)
+
+    async def test_boost_from_off_returns_off_after_expiry_and_restart(self):
+        from datetime import timedelta
+
+        from homeassistant.util import dt as dt_util
+
+        self.simulated_receiver()
+        await self.configure_builtin()
+        self.hass.states.async_set("climate.test_zone", "off", self.attrs)
+        await self.runtime.async_evaluate()
+        await self.enable_control()
+        await self.runtime.async_control_action(
+            "boost_start", "zone_a", {"target": 23, "minutes": 1}
+        )
+        self.assertEqual(self.hass.states.get("climate.test_zone").state, "heat")
+        self.runtime.close()
+        # Re-create runtime against the same HA Store; deadlines are not restarted.
+        self.runtime = Runtime(self.hass, self.entry)
+        self.entry.runtime_data = self.runtime
+        with patch(
+            "custom_components.smart_heating_scheduler.runtime.dt_util.utcnow",
+            return_value=dt_util.utcnow() + timedelta(minutes=2),
+        ):
+            await self.runtime.async_setup()
+        self.assertEqual(self.hass.states.get("climate.test_zone").state, "off")
+        self.assertIsNone(self.runtime.smart_record("zone_a")["boost"])
+
+    async def test_holiday_supersedes_manual_hold_and_respects_off(self):
+        from datetime import timedelta
+
+        from homeassistant.util import dt as dt_util
+
+        from custom_components.smart_heating_scheduler.engine import Hold
+
+        await self.configure_builtin()
+        limits = self.runtime.zones["zone_a"].limits
+        await self.runtime.repository.save_hold("zone_a", Hold("manual", 24, None), limits)
+        now = dt_util.utcnow()
+        await self.runtime.async_control_action(
+            "holiday",
+            "zone_a",
+            {"start": now.isoformat(), "end": (now + timedelta(days=1)).isoformat(), "target": 17},
+        )
+        self.assertEqual(self.runtime.status["zone_a"]["target"], 17)
+        self.assertIsNone(self.runtime.repository.read("zone_a", limits)[1])
+        with self.assertRaises(ValidationError):
+            await self.runtime.async_control_action("boost_start", "zone_a", {})
+        self.hass.states.async_set("climate.test_zone", "off", self.attrs)
+        await self.runtime.async_evaluate()
+        self.assertEqual(self.runtime.status["zone_a"]["source"], "manual_off")
+        await self.runtime.async_control_action("holiday", "zone_a", {"cancel": True})
+        self.assertIsNone(self.runtime.status["zone_a"]["target"])
+        self.assertEqual(self.calls, [])
+
+    async def test_presence_forcing_unknown_delay_and_deadline_expiry(self):
+        from datetime import timedelta
+
+        from homeassistant.util import dt as dt_util
+
+        await self.configure_builtin()
+        self.hass.states.async_set(
+            "person.test", "home", {"device_trackers": ["device_tracker.test"]}
+        )
+        p = self.runtime.smart_record("zone_a")["policy"]
+        p.update(
+            away_target=16,
+            entities=[{"entity_id": "person.test", "home_state": "home", "away_state": "not_home"}],
+        )
+        await self.runtime.async_control_action(
+            "policy",
+            "zone_a",
+            {"policy": p, "revision": self.runtime.smart_record("zone_a")["policy_revision"]},
+        )
+        self.assertEqual(self.runtime.smart_status["zone_a"]["occupancy"], "home")
+        await self.runtime.async_control_action(
+            "presence", "zone_a", {"mode": "away", "minutes": 1}
+        )
+        self.assertEqual(self.runtime.status["zone_a"]["target"], 16)
+        with patch(
+            "custom_components.smart_heating_scheduler.runtime.dt_util.utcnow",
+            return_value=dt_util.utcnow() + timedelta(minutes=2),
+        ):
+            await self.runtime.async_evaluate()
+        self.assertEqual(self.runtime.smart_status["zone_a"]["occupancy"], "home")
+        self.assertIsNone(self.runtime.smart_record("zone_a")["override"])
+
+    async def test_control_action_denies_non_admin_and_requires_mode_acknowledgement(self):
+        await self.configure_builtin()
+        connection, _ = self.connection(admin=False)
+        with self.assertRaises(Unauthorized):
+            card_api.control_action(self.hass, connection, {"id": 1})
+        with self.assertRaises(ValidationError):
+            await self.runtime.async_control_action("mode", "zone_a", {"enabled": True})
+        self.assertFalse(self.runtime.repository.control_enabled)
+        self.assertEqual(self.calls, [])
+
+    async def test_external_scripts_are_awaited_and_automatic_release_inhibits_writer(self):
+        await self.runtime.async_setup()
+        self.hass.states.async_set("script.test_start", "off")
+        self.hass.states.async_set("script.test_stop", "off")
+        p = self.runtime.smart_record("zone_a")["policy"]
+        p.update(
+            boost_target=25, start_script="script.test_start", cancel_script="script.test_stop"
+        )
+        await self.runtime.async_control_action(
+            "policy",
+            "zone_a",
+            {"policy": p, "revision": self.runtime.smart_record("zone_a")["policy_revision"]},
+        )
+
+        async def start(call):
+            self.hass.states.async_set("timer.test_boost", "active")
+
+        async def stop(call):
+            self.hass.states.async_set("timer.test_boost", "idle")
+
+        self.hass.services.async_register("script", "test_start", start)
+        self.hass.services.async_register("script", "test_stop", stop)
+        with self.assertRaises(ValidationError):
+            await self.runtime.async_control_action("boost_start", "zone_a", {})
+        await self.enable_control()
+        await self.runtime.async_control_action("boost_start", "zone_a", {})
+        self.assertEqual(self.runtime.status["zone_a"]["source"], "external_boost")
+        await self.runtime.async_control_action("boost_cancel", "zone_a", {})
+        self.assertIsNone(self.runtime.smart_record("zone_a")["external_operation"])
+        await self.runtime.async_control_action("boost_start", "zone_a", {})
+        self.hass.states.async_set("timer.test_boost", "idle")
+        await self.runtime.async_evaluate()
+        self.assertEqual(self.runtime.status["zone_a"]["source"], "boost_handover")
+        await self.runtime.async_control_action("reconcile", "zone_a", {"confirmed": True})
+        self.assertEqual(self.runtime.status["zone_a"]["source"], "schedule")
+
+    async def test_unconfirmed_writer_stops_after_three_attempts(self):
+        from datetime import timedelta
+
+        from homeassistant.util import dt as dt_util
+
+        await self.configure_builtin()
+        await self.enable_control()
+        await self.runtime.async_control_action("boost_start", "zone_a", {"target": 23})
+        now = dt_util.utcnow()
+        for seconds in (6, 22, 55, 100):
+            with patch(
+                "custom_components.smart_heating_scheduler.runtime.dt_util.utcnow",
+                return_value=now + timedelta(seconds=seconds),
+            ):
+                await self.runtime.async_evaluate()
+        self.assertEqual(len(self.calls), 3)
+        self.assertEqual(self.runtime.status["zone_a"]["error"], "command_not_confirmed")
+
+    def setUp(self):
+        Path(".ha-check").mkdir(exist_ok=True)
+        self.temp = tempfile.TemporaryDirectory(dir=".ha-check")
+        self.config_dir = str(Path(self.temp.name).resolve())
+
+    async def asyncSetUp(self):
+        self.hass = HomeAssistant(self.config_dir)
+        await self.hass.config.async_set_time_zone("Europe/London")
+        self.hass.config_entries = ConfigEntries(self.hass, {})
+        await self.hass.config_entries.async_initialize()
+        dr.async_setup(self.hass)
+        await dr.async_load(self.hass)
+        await er.async_load(self.hass)
+        self.attrs = {
+            "hvac_modes": ["off", "heat"],
+            "supported_features": 385,
+            "min_temp": 5,
+            "max_temp": 32,
+            "temperature_unit": "°C",
+            "target_temp_step": 0.5,
+            "temperature": 20,
+            "current_temperature": 19,
+        }
+        self.hass.states.async_set("climate.test_zone", "heat", self.attrs)
+        self.hass.states.async_set("timer.test_boost", "idle")
+        data = {
+            "name": "Test zone",
+            "climate_entity": "climate.test_zone",
+            "minimum": 16,
+            "maximum": 28,
+            "step": 0.5,
+            "unit": "°C",
+            "baseline_temperature": 20,
+            "enabled": True,
+            "manual_policy": "next_period",
+            "manual_minutes": 120,
+            "boost_timer": "timer.test_boost",
+            "climate_registry_id": None,
+        }
+        self.entry = ConfigEntry(
+            domain=DOMAIN,
+            title="Test scheduler",
+            data={},
+            options={},
+            source="user",
+            unique_id=None,
+            version=1,
+            minor_version=1,
+            discovery_keys=MappingProxyType({}),
+            subentries_data=[
+                {
+                    "subentry_id": "zone_a",
+                    "subentry_type": "zone",
+                    "title": "Test zone",
+                    "unique_id": "climate.test_zone",
+                    "data": data,
+                }
+            ],
+        )
+        self.runtime = Runtime(self.hass, self.entry)
+        self.entry.runtime_data = self.runtime
+        self.calls = []
+
+        async def capture(call):
+            self.calls.append(call)
+
+        self.hass.services.async_register("climate", "set_temperature", capture)
+        self.hass.services.async_register("climate", "set_hvac_mode", capture)
+
+    async def asyncTearDown(self):
+        self.runtime.close()
+        await self.hass.async_stop(force=True)
+        self.temp.cleanup()
+
+    async def test_preview_setup_storage_sensors_and_unload_never_actuate(self):
+        await self.runtime.async_setup()
+        self.assertEqual(self.runtime.status["zone_a"]["target"], 20)
+        self.assertTrue(self.runtime.status["zone_a"]["observe_only"])
+        added = []
+
+        def add(entities, **kwargs):
+            added.extend(entities)
+            self.assertEqual(kwargs["config_subentry_id"], "zone_a")
+
+        await setup_sensors(self.hass, self.entry, add)
+        self.assertEqual(len(added), 3)
+        self.assertEqual(added[0].native_value, 20)
+        self.assertTrue(added[0].extra_state_attributes["writes_inhibited"])
+        stored = Path(self.temp.name, ".storage", f"{DOMAIN}.{self.entry.entry_id}")
+        text = await self.hass.async_add_executor_job(stored.read_text)
+        self.assertEqual(json.loads(text)["data"]["schema"], 2)
+        self.runtime.close()
+        self.assertEqual(self.calls, [])
+
+    async def test_external_boost_and_missing_signal_block_schedule(self):
+        await self.runtime.async_setup()
+        self.hass.states.async_set("timer.test_boost", "active")
+        await self.runtime.async_evaluate()
+        self.assertEqual(self.runtime.status["zone_a"]["source"], "external_boost")
+        self.hass.states.async_set("timer.test_boost", "unavailable")
+        await self.runtime.async_evaluate()
+        self.assertEqual(self.runtime.status["zone_a"]["source"], "boost_unknown")
+        self.assertEqual(self.calls, [])
+
+    async def test_config_forms_and_zone_validation_use_real_ha_selectors(self):
+        flow = SchedulerConfigFlow()
+        flow.hass = self.hass
+        initial = await flow.async_step_user()
+        self.assertEqual(initial["step_id"], "user")
+        with patch.object(ZoneSubentryFlow, "_get_entry", return_value=self.entry):
+            zone_flow = ZoneSubentryFlow()
+            zone_flow.hass = self.hass
+            form = await zone_flow.async_step_user()
+            self.assertEqual(form["step_id"], "user")
+            invalid = dict(self.entry.subentries["zone_a"].data)
+            invalid["climate_entity"] = "climate.not_present"
+            self.assertEqual(
+                (await zone_flow.async_step_user(invalid))["errors"]["base"], "invalid_zone"
+            )
+        with self.assertRaises(ValidationError):
+            validate_zone(self.hass, self.entry.subentries["zone_a"].data, self.entry.subentries)
+
+    async def test_admin_action_rejects_non_admin_before_save(self):
+        await self.runtime.async_setup()
+        # Provide only a local fake auth user, while exercising HA's actual
+        # administrator-service wrapper and service registry.
+        self.hass.auth = SimpleNamespace(
+            async_get_user=AsyncMock(return_value=SimpleNamespace(is_admin=False))
+        )
+        async_register_services(self.hass)
+        with self.assertRaises(Unauthorized):
+            await self.hass.services.async_call(
+                DOMAIN,
+                "resume_preview",
+                {"entry_id": self.entry.entry_id, "zone_id": "zone_a"},
+                blocking=True,
+                context=Context(user_id="not-an-admin"),
+            )
+        self.assertEqual(self.calls, [])
+
+    def connection(self, *, admin=True, read=True):
+        messages = []
+        user = SimpleNamespace(
+            is_admin=admin, permissions=SimpleNamespace(check_entity=lambda entity_id, policy: read)
+        )
+        connection = SimpleNamespace(
+            user=user,
+            subscriptions={},
+            send_result=lambda message_id, data=None: messages.append(("result", data)),
+            send_event=lambda message_id, data: messages.append(("event", data)),
+            send_error=lambda message_id, code, message: messages.append(("error", code)),
+        )
+        return connection, messages
+
+    async def test_card_snapshot_filters_entity_permissions_and_has_no_location_data(self):
+        await self.runtime.async_setup()
+        connection, _ = self.connection()
+        data = card_api.dashboard(self.hass, self.entry, connection.user)
+        self.assertEqual(data["schema_version"], 1)
+        self.assertEqual(data["zones"][0]["current_temperature"], 19)
+        self.assertEqual(data["zones"][0]["revision"], 1)
+        self.assertFalse(data["zones"][0]["boost"]["can_start"])
+        self.assertNotIn("latitude", json.dumps(data))
+        restricted, _ = self.connection(admin=False, read=False)
+        self.assertEqual(card_api.dashboard(self.hass, self.entry, restricted.user)["zones"], [])
+
+    async def test_card_subscription_sends_updates_and_disposes(self):
+        await self.runtime.async_setup()
+        connection, messages = self.connection()
+        with patch.object(card_api, "loaded_entry", return_value=self.entry):
+            card_api.subscribe_dashboard(self.hass, connection, {"id": 1, "entry_id": "test"})
+        self.assertEqual([kind for kind, _ in messages], ["result", "event"])
+        await self.runtime.async_evaluate()
+        self.assertEqual(messages[-1][0], "event")
+        connection.subscriptions[1]()
+        self.assertEqual(len(self.runtime.listeners), 0)
+
+    async def test_card_write_endpoint_rejects_non_admin(self):
+        connection, messages = self.connection(admin=False)
+        with self.assertRaises(Unauthorized):
+            card_api.save_schedule(self.hass, connection, {"id": 1})
+        self.assertEqual(messages, [])
+
+    async def test_card_schedule_save_checks_revision_and_never_actuates(self):
+        await self.runtime.async_setup()
+        connection, messages = self.connection()
+        week = self.runtime.repository.read("zone_a", self.runtime.zones["zone_a"].limits)[
+            0
+        ].to_dict()
+        week["mon"][0]["temperature"] = 22
+        with patch.object(card_api, "loaded_entry", return_value=self.entry):
+            card_api.save_schedule(
+                self.hass,
+                connection,
+                {"id": 1, "entry_id": "test", "zone_id": "zone_a", "revision": 1, "week": week},
+            )
+            await self.hass.async_block_till_done(wait_background_tasks=True)
+            self.assertEqual(messages[-1][0], "result")
+            self.assertEqual(messages[-1][1]["zones"][0]["revision"], 2)
+            card_api.save_schedule(
+                self.hass,
+                connection,
+                {"id": 2, "entry_id": "test", "zone_id": "zone_a", "revision": 1, "week": week},
+            )
+            await self.hass.async_block_till_done(wait_background_tasks=True)
+        self.assertEqual(messages[-1], ("error", "revision_conflict"))
+        self.assertEqual(self.calls, [])

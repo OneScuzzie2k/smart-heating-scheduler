@@ -1,0 +1,18 @@
+{
+  "domain": "smart_heating_scheduler",
+  "name": "Smart Heating Scheduler (Preview)",
+  "codeowners": [
+    "@OneScuzzie2k"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "climate",
+    "websocket_api"
+  ],
+  "documentation": "https://github.com/OneScuzzie2k/smart-heating-scheduler",
+  "integration_type": "helper",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/OneScuzzie2k/smart-heating-scheduler/issues",
+  "requirements": [],
+  "version": "0.3.0.dev1"
+}

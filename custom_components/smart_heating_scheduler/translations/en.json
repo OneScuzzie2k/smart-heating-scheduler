@@ -1,0 +1,81 @@
+{
+  "title": "Smart Heating Scheduler (Preview)",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Create an observe-only scheduler",
+        "description": "Starts in observe-only mode: existing heating controls stay in charge. Add zones, review the proposed schedules and smart modes in the companion card. Heating commands require explicit control-mode activation after a reviewed handover. Use a separate test instance for this development build."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Only one scheduler instance is supported."
+    }
+  },
+  "config_subentries": {
+    "zone": {
+      "initiate_flow": {
+        "user": "Add heating zone"
+      },
+      "step": {
+        "user": {
+          "title": "Add a heating zone",
+          "description": "Choose a single-target heating climate entity. Review limits and an initial baseline in its unit (Celsius or Fahrenheit). The baseline fills all seven days until edited. These are application bounds, not a protection guarantee. If heating control is already enabled for the scheduler, new enabled zones also participate. An optional existing boost timer establishes external ownership; configure its adapter in the card Settings.",
+          "data": {
+            "name": "Zone name",
+            "climate_entity": "Thermostat",
+            "minimum": "Reviewed minimum target",
+            "maximum": "Reviewed maximum target",
+            "baseline_temperature": "Initial all-day target",
+            "enabled": "Enable zone scheduling",
+            "manual_policy": "Resume after an observed manual target change",
+            "manual_minutes": "Hold duration in minutes (duration policy only)",
+            "boost_timer": "Existing boost timer entity ID (optional)"
+          }
+        },
+        "reconfigure": {
+          "title": "Manage heating zone",
+          "menu_options": {
+            "settings": "Zone settings",
+            "schedule": "Edit seven-day preview schedule",
+            "resume": "Clear preview manual hold"
+          }
+        },
+        "settings": {
+          "title": "Zone settings",
+          "description": "Keep the same thermostat and units; create a new zone to replace a device. Limits must accommodate schedules, holds and smart-mode targets. Manage boost ownership and timer changes in the companion card Settings. If control mode is enabled, these settings can affect heating after reload.",
+          "data": {
+            "name": "Zone name",
+            "climate_entity": "Thermostat",
+            "minimum": "Reviewed minimum target",
+            "maximum": "Reviewed maximum target",
+            "baseline_temperature": "Initial baseline (does not overwrite saved schedules)",
+            "enabled": "Enable zone scheduling",
+            "manual_policy": "Resume after an observed manual target change",
+            "manual_minutes": "Hold duration in minutes (duration policy only)",
+            "boost_timer": "Existing boost timer entity ID (optional)"
+          }
+        },
+        "schedule": {
+          "title": "Edit preview week",
+          "description": "Use the companion card for visual editing, or supply exactly mon through sun here. Each day contains ordered periods with start (HH:MM), temperature and optional label, beginning at 00:00. Ends follow the next start; the last extends to 24:00. Saving re-evaluates heating if control mode is enabled. Close without submitting to cancel.",
+          "data": {
+            "week_json": "Seven-day schedule JSON"
+          }
+        },
+        "resume": {
+          "title": "Clear preview manual hold?",
+          "description": "This clears only the scheduler's stored manual hold. It will not switch on heating or cancel an external boost. A physically off thermostat stays off."
+        }
+      },
+      "error": {
+        "invalid_zone": "Check the thermostat is available, supports heat with a single target, is not mapped twice, and has reviewed limits/targets matching its capabilities. Existing schedules and holds must also fit new limits. When replacing a device, create a new zone.",
+        "invalid_schedule": "Supply a complete valid week with ordered unique starts, a 00:00 baseline for each day, and temperatures within this zone's limits/increment. If another editor saved first, close and reopen this editor to refresh its revision.",
+        "save_failed": "Storage could not be saved. Nothing was committed; check storage and try again."
+      },
+      "abort": {
+        "schedule_saved": "Schedule saved. Heating follows the selected control mode.",
+        "preview_resumed": "Stored manual hold cleared. A physically off thermostat stays off."
+      }
+    }
+  }
+}

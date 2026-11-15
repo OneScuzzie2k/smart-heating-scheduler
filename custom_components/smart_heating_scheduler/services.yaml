@@ -1,0 +1,40 @@
+update_schedule:
+  name: Update schedule
+  description: Validate and save a full week. Re-evaluates heating when control mode is enabled. Administrator only.
+  fields:
+    entry_id:
+      required: true
+      name: Scheduler config entry ID
+      selector:
+        text:
+    zone_id:
+      required: true
+      name: Zone subentry ID
+      selector:
+        text:
+    revision:
+      required: true
+      name: Expected current schedule revision
+      selector:
+        number:
+          min: 1
+          mode: box
+    week:
+      required: true
+      name: Seven-day schedule
+      selector:
+        object:
+resume_preview:
+  name: Clear preview manual hold
+  description: Clear this integration's manual hold. A physically off thermostat stays off and an external boost stays owned by its adapter. Re-evaluates targets if heating control is enabled.
+  fields:
+    entry_id:
+      required: true
+      name: Scheduler config entry ID
+      selector:
+        text:
+    zone_id:
+      required: true
+      name: Zone subentry ID
+      selector:
+        text:

@@ -1,0 +1,5 @@
+{
+  "name": "Smart Heating Scheduler",
+  "homeassistant": "2026.11.1",
+  "render_readme": true
+}
