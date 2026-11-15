@@ -17,10 +17,16 @@ async def async_setup_entry(hass, entry):
         async_register_services(hass)
         async_register_api(hass)
         await hass.config_entries.async_forward_entry_setups(entry, [Platform.SENSOR])
+        entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     except BaseException:
         runtime.close()
         raise
     return True
+
+
+async def _async_reload_entry(hass, entry):
+    """Pick up added/removed zone subentries as well as entry settings."""
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 async def async_unload_entry(hass, entry):

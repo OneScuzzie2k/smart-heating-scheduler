@@ -1,3 +1,7 @@
+# 0.3.0.dev2 - zone setup lifecycle fix
+
+Reload the integration when zone subentries change, so newly added zones become available without a manual reload. Classify the multi-zone scheduler as a service so HA displays its zone subentries and management controls. Adds a real-HA config-entry update-listener test. Existing schedules and control-mode intent are preserved.
+
 # 0.3.0.dev1 - Phase 3 development candidate
 
 Added working per-zone boost, presence and holiday controls; persistent deadlines/ownership, guarded optional climate commands, adapter completion signals, policy revisions and admin-only mutations. Default remains observe-only. Updated responsive card and disconnected demo. Full installation/hardware validation and release work remain.

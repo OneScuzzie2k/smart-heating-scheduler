@@ -33,6 +33,30 @@ from custom_components.smart_heating_scheduler.sensor import async_setup_entry a
 
 
 class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_added_zone_subentry_triggers_integration_reload(self):
+        from homeassistant.config_entries import ConfigSubentry
+
+        from custom_components.smart_heating_scheduler import async_setup_entry
+
+        self.hass.config_entries._entries[self.entry.entry_id] = self.entry
+        with (
+            patch.object(self.hass.config_entries, "async_forward_entry_setups", new=AsyncMock()),
+            patch.object(
+                self.hass.config_entries, "async_reload", new=AsyncMock(return_value=True)
+            ) as reload_entry,
+        ):
+            self.assertTrue(await async_setup_entry(self.hass, self.entry))
+            self.runtime = self.entry.runtime_data
+            added = ConfigSubentry(
+                data=MappingProxyType(dict(self.entry.subentries["zone_a"].data)),
+                subentry_type="zone",
+                title="Second zone",
+                unique_id="second_zone",
+            )
+            self.hass.config_entries.async_add_subentry(self.entry, added)
+            await self.hass.async_block_till_done(wait_background_tasks=True)
+            reload_entry.assert_awaited_once_with(self.entry.entry_id)
+
     async def test_card_boost_capability_tracks_availability_and_selected_owner(self):
         await self.configure_builtin()
         connection, _ = self.connection()

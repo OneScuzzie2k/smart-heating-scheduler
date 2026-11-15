@@ -43,4 +43,4 @@ The card is a separate repository because HACS/Marketplace installs one item of 
 
 ## Distribution status
 
-Development version 0.3.0.dev1. Public GitHub development source prepared for HACS/Marketplace custom-repository installation. This is not a catalog-listed release or a live deployment. Full HA bootstrap/platform/config-flow testing, Linux and hardware acceptance, inheritance/bulk configuration, import/export, accessibility, translations and broader release validation remain before a stable release. MIT licensed. Public packages exclude home-specific audit and handover files.
+Development version 0.3.0.dev2. Public GitHub development source prepared for HACS/Marketplace custom-repository installation. This is not a catalog-listed release or a live deployment. Full HA bootstrap/platform/config-flow testing, Linux and hardware acceptance, inheritance/bulk configuration, import/export, accessibility, translations and broader release validation remain before a stable release. MIT licensed. Public packages exclude home-specific audit and handover files.
