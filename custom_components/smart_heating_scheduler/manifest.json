@@ -1,6 +1,9 @@
 {
   "domain": "smart_heating_scheduler",
   "name": "Smart Heating Scheduler (Preview)",
+  "categories": [
+    "climate.thermostats_heating"
+  ],
   "codeowners": [
     "@OneScuzzie2k"
   ],

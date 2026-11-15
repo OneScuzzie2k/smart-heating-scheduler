@@ -75,7 +75,8 @@
       "abort": {
         "schedule_saved": "Schedule saved. Heating follows the selected control mode.",
         "preview_resumed": "Stored manual hold cleared. A physically off thermostat stays off."
-      }
+      },
+      "entry_type": "Heating zone"
     }
   }
 }

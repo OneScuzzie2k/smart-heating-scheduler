@@ -48,3 +48,13 @@ broader HA themes, translations and HACS/licence/repository release metadata.
 Installation defaults/inheritance, bulk holiday scope, display sensors,
 import/export and richer return/manual-off policies are follow-up features.
 Current smart controls are independent per zone; see docs/CONTROL_POLICIES.md.
+
+GitHub publication checks - 15 November 2026
+-------------------------------------------
+Published under OneScuzzie2k/smart-heating-scheduler with MIT licence and
+HACS/Marketplace metadata. Initial GitHub Ubuntu backend checks passed
+(standalone logic, real-HA simulated API tests, Ruff and compilation).
+Hassfest identified a missing subentry entry_type translation; added it to
+strings.json and en.json. HACS initially ran before repository topics were
+saved; topics are now set. Publishing checks are being rerun before install.
+No live Home Assistant files or settings changed.
