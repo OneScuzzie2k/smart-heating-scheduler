@@ -1,6 +1,6 @@
 # Installation and setup
 
-This guide covers integration **0.3.0.dev2** with companion card **0.3.0-dev.4**. Both are early-access pre-releases. Start with observe-only comparison before a supervised heating-control test.
+This guide covers integration **0.3.0.dev2** with companion card **0.3.0-dev.5**. Both are early-access pre-releases. Start with observe-only comparison before a supervised heating-control test.
 
 ## Requirements
 
@@ -21,7 +21,7 @@ Choose **Add from link**, enter each GitHub repository URL and confirm the repos
 | Package | GitHub repository | Type | Version |
 | --- | --- | --- | --- |
 | Backend | https://github.com/OneScuzzie2k/smart-heating-scheduler | Integration | `0.3.0.dev2` |
-| Companion card | https://github.com/OneScuzzie2k/smart-heating-scheduler-card | Dashboard | `0.3.0-dev.4` |
+| Companion card | https://github.com/OneScuzzie2k/smart-heating-scheduler-card | Dashboard | `0.3.0-dev.5` |
 
 Open the repository's menu and enable **Include pre-releases** to see development releases. If necessary, use **Install another version** to choose the tag above. Prefer these tagged versions for reproducible testing. A short commit hash in the installed-version display means a default-branch build; record it when reporting an issue.
 
