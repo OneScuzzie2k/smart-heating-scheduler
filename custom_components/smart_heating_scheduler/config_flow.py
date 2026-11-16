@@ -191,6 +191,10 @@ class ZoneSubentryFlow(ConfigSubentryFlow):
                         Limits(data["minimum"], data["maximum"], data["step"]),
                         subentry.data.get("boost_timer", ""),
                     )
+                    entry.runtime_data.insights.read(
+                        subentry.subentry_id,
+                        Limits(data["minimum"], data["maximum"], data["step"]),
+                    )
                     if data.get("boost_timer", "") != smart_record["policy"]["timer"]:
                         raise ValidationError(
                             "Manage boost ownership and timer mappings in the card Settings"

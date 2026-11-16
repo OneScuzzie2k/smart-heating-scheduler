@@ -1,5 +1,16 @@
 # 0.3.1 - boost migration and reload cleanup
 
+## 0.4.0.dev1 — local candidate
+
+- Optional per-zone named day profiles with ordered calendar and Workday rules.
+- Bounded seven-day room/target measurements and final decision explanations.
+- Measured warm-up learning and opt-in, capped preheating that respects existing owners.
+- Separate versioned feature storage, stale edit protection, source-failure warnings,
+  and cancellation of queued evaluation jobs during unload.
+- Companion UI adds History, profile editing and preheat settings; minis stay compact.
+- Pending live multi-cycle learning and calendar acceptance; no stable release yet.
+
+
 - Zone settings show the active card policy's boost timer, allowing the initial timer mapping to be cleared after migration to built-in boost, even after the old helper has been removed. Settings cannot select a timer that disagrees with the active boost policy.
 - Do not unregister a consumed Home Assistant startup listener during a later integration reload, avoiding an unnecessary core error log entry.
 - Add regression tests for both cases: 49 standalone and 28 real-HA simulated runtime tests pass. Compatible with card 0.3.0; schedules and active control intent are preserved.

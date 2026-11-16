@@ -40,13 +40,20 @@ class PreviewController:
         self._lock = asyncio.Lock()
 
     async def evaluate(
-        self, zone: Zone, observation: Observation, now: datetime, *, detect_manual=True
+        self,
+        zone: Zone,
+        observation: Observation,
+        now: datetime,
+        *,
+        detect_manual=True,
+        week_override=None,
     ) -> Decision:
         async with self._lock:
             record = self.repository.read(zone.id, zone.limits)
             if record is None:
                 raise ValidationError("Zone has no reviewed schedule")
             week, hold, _revision = record
+            week = week_override or week
             if hold is not None and not hold.active(now):
                 hold = None
                 await self.repository.save_hold(zone.id, None, zone.limits)

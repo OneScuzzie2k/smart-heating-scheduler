@@ -33,6 +33,215 @@ from custom_components.smart_heating_scheduler.sensor import async_setup_entry a
 
 
 class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_slow_calendar_refresh_does_not_block_boost_or_flicker_profile(self):
+        import asyncio
+        from datetime import timedelta
+
+        from homeassistant.util import dt as dt_util
+
+        await self.configure_builtin()
+        self.hass.states.async_set("calendar.test", "off")
+        record = self.runtime.insights.read("zone_a", self.runtime.zones["zone_a"].limits)
+        record["settings"]["profiles"] = {"Day off": [{"start": "00:00", "temperature": 19}]}
+        record["settings"]["calendar_rules"] = [
+            {"entity_id": "calendar.test", "match": "", "profile": "Day off"}
+        ]
+        await self.runtime.insights.save("zone_a", record)
+        now = dt_util.utcnow()
+        self.runtime._calendar_cache["calendar.test"] = (
+            now - timedelta(seconds=1),
+            [{"start": now - timedelta(hours=1), "end": now + timedelta(hours=1), "summary": ""}],
+        )
+        release = asyncio.Event()
+
+        async def slow(*args):
+            await release.wait()
+            return {"calendar.test": {"events": []}}
+
+        with patch.object(self.runtime, "_read_feature_service", slow):
+            await asyncio.wait_for(self.runtime.async_evaluate(), 1)
+            self.assertEqual(self.runtime.status["zone_a"]["target"], 19)
+            self.assertTrue(self.runtime._feature_reads)
+            await asyncio.wait_for(
+                self.runtime.async_control_action(
+                    "boost_start", "zone_a", {"minutes": 5, "target": 23}
+                ),
+                1,
+            )
+            self.assertEqual(self.runtime.status["zone_a"]["source"], "boost")
+            release.set()
+            await self.hass.async_block_till_done()
+        self.assertEqual(self.runtime.status["zone_a"]["source"], "boost")
+        self.assertEqual(self.calls, [])
+
+    async def test_workday_future_dates_and_all_day_calendar_normalization(self):
+        from datetime import timedelta
+
+        from homeassistant.util import dt as dt_util
+
+        from custom_components.smart_heating_scheduler.insight_controls import event_time
+
+        await self.configure_builtin()
+        self.hass.states.async_set("binary_sensor.test_workday", "on")
+        record = self.runtime.insights.read("zone_a", self.runtime.zones["zone_a"].limits)
+        settings = record["settings"]
+        settings.update(
+            profiles={
+                "Workday": [{"start": "00:00", "temperature": 21}],
+                "Day off": [{"start": "00:00", "temperature": 18}],
+            },
+            workday_entity="binary_sensor.test_workday",
+            workday_profile="Workday",
+            non_workday_profile="Day off",
+        )
+        reader = AsyncMock(return_value={"binary_sensor.test_workday": {"workday": False}})
+        with patch.object(self.runtime, "_read_feature_service", reader):
+            await self.runtime.async_control_action(
+                "insights", "zone_a", {"revision": 1, "settings": settings}
+            )
+            await self.hass.async_block_till_done()
+        self.assertEqual(reader.await_count, 6)
+        self.assertEqual(self.runtime.status["zone_a"]["target"], 21)
+        self.assertEqual(self.runtime.insight_status["zone_a"]["days"][1]["profile"], "Day off")
+        tomorrow = (
+            dt_util.utcnow().astimezone(self.runtime.controller.timezone).date() + timedelta(days=1)
+        ).isoformat()
+        self.assertIn(tomorrow, [call.args[2]["check_date"] for call in reader.call_args_list])
+        start = event_time("2026-10-25", self.runtime.controller.timezone)
+        end = event_time("2026-10-26", self.runtime.controller.timezone)
+        self.assertEqual((end - start).total_seconds() / 3600, 25)
+        self.assertEqual(self.calls, [])
+
+    async def test_profile_settings_revision_restart_and_calendar_failure_fallback(self):
+        await self.configure_builtin()
+        self.hass.states.async_set("calendar.days_off", "off")
+        record = self.runtime.insights.read("zone_a", self.runtime.zones["zone_a"].limits)
+        settings = record["settings"]
+        settings["profiles"] = {"Day off": [{"start": "00:00", "temperature": 19}]}
+        settings["calendar_rules"] = [
+            {"entity_id": "calendar.days_off", "match": "OFF", "profile": "Day off"}
+        ]
+        from datetime import timedelta
+
+        from homeassistant.util import dt as dt_util
+
+        now = dt_util.utcnow()
+        response = {
+            "calendar.days_off": {
+                "events": [
+                    {
+                        "start": now.isoformat(),
+                        "end": (now + timedelta(hours=1)).isoformat(),
+                        "summary": "Private day OFF title",
+                    }
+                ]
+            }
+        }
+        with patch.object(self.runtime, "_read_feature_service", AsyncMock(return_value=response)):
+            await self.runtime.async_control_action(
+                "insights", "zone_a", {"revision": 1, "settings": settings}
+            )
+            await self.hass.async_block_till_done()
+        self.assertEqual(self.runtime.status["zone_a"]["target"], 19)
+        self.assertEqual(self.runtime.insight_status["zone_a"]["active_profile"], "Day off")
+        self.assertNotIn("Private day", json.dumps(self.runtime.insight_status))
+        with self.assertRaises(ValidationError):
+            await self.runtime.async_control_action(
+                "insights", "zone_a", {"revision": 1, "settings": settings}
+            )
+            await self.hass.async_block_till_done()
+        self.runtime.close()
+        self.runtime = Runtime(self.hass, self.entry)
+        self.entry.runtime_data = self.runtime
+        self.hass.states.async_set("calendar.days_off", "unavailable")
+        await self.runtime.async_setup()
+        self.assertEqual(self.runtime.status["zone_a"]["target"], 20)
+        self.assertTrue(self.runtime.insight_status["zone_a"]["warnings"])
+        self.assertEqual(
+            self.runtime.insights.read("zone_a", self.runtime.zones["zone_a"].limits)["revision"], 2
+        )
+        self.assertEqual(self.calls, [])
+
+    async def test_measured_preheating_writes_only_when_enabled_and_respects_off(self):
+        from datetime import UTC, datetime, timedelta
+
+        from custom_components.smart_heating_scheduler.const import DAYS
+        from custom_components.smart_heating_scheduler.engine import Week
+
+        self.simulated_receiver()
+        await self.configure_builtin()
+        now = (datetime.now(UTC) + timedelta(days=1)).replace(
+            hour=6, minute=0, second=0, microsecond=0
+        )
+        periods = [{"start": "00:00", "temperature": 16}, {"start": "06:30", "temperature": 20}]
+        zone = self.runtime.zones["zone_a"]
+        await self.runtime.repository.save_week(
+            zone.id, Week.parse({d: periods for d in DAYS}, zone.limits).to_dict(), zone.limits, 1
+        )
+        record = self.runtime.insights.read(zone.id, zone.limits)
+        record["settings"]["preheat_enabled"] = True
+        record["model"] = {"rate": 2, "samples": 12, "minutes": 60, "updated": now.isoformat()}
+        await self.runtime.insights.save(zone.id, record)
+        with patch(
+            "custom_components.smart_heating_scheduler.runtime.dt_util.utcnow", return_value=now
+        ):
+            await self.runtime.async_evaluate()
+        self.assertEqual(self.runtime.status[zone.id]["source"], "preheat")
+        self.assertEqual(self.calls, [])  # observe-only still computes without commands
+        await self.runtime.repository.set_control(True)
+        self.hass.states.async_set(
+            "climate.test_zone",
+            "heat",
+            {**self.attrs, "temperature": 16, "current_temperature": 19},
+        )
+        self.runtime.controller._previous.clear()
+        with patch(
+            "custom_components.smart_heating_scheduler.runtime.dt_util.utcnow",
+            return_value=now + timedelta(minutes=1),
+        ):
+            await self.runtime.async_evaluate()
+        self.assertEqual(self.hass.states.get("climate.test_zone").attributes["temperature"], 20)
+        self.hass.states.async_set("climate.test_zone", "off", self.attrs)
+        with patch(
+            "custom_components.smart_heating_scheduler.runtime.dt_util.utcnow",
+            return_value=now + timedelta(minutes=2),
+        ):
+            await self.runtime.async_evaluate()
+        self.assertIn(self.runtime.status[zone.id]["source"], {"off", "manual_off"})
+        self.assertEqual(self.hass.states.get("climate.test_zone").state, "off")
+
+    async def test_insight_store_failure_never_sends_speculative_heat(self):
+        from datetime import UTC, datetime, timedelta
+
+        from custom_components.smart_heating_scheduler.const import DAYS
+        from custom_components.smart_heating_scheduler.engine import Week
+
+        await self.configure_builtin()
+        zone = self.runtime.zones["zone_a"]
+        now = (datetime.now(UTC) + timedelta(days=1)).replace(
+            hour=6, minute=0, second=0, microsecond=0
+        )
+        periods = [{"start": "00:00", "temperature": 16}, {"start": "06:30", "temperature": 23}]
+        await self.runtime.repository.save_week(
+            zone.id, Week.parse({d: periods for d in DAYS}, zone.limits).to_dict(), zone.limits, 1
+        )
+        record = self.runtime.insights.read(zone.id, zone.limits)
+        record["settings"]["preheat_enabled"] = True
+        record["model"] = {"rate": 2, "samples": 12, "minutes": 60, "updated": now.isoformat()}
+        await self.runtime.insights.save(zone.id, record)
+        await self.runtime.repository.set_control(True)
+        self.calls.clear()
+        with (
+            patch.object(self.runtime.insights, "save", AsyncMock(side_effect=OSError)),
+            patch(
+                "custom_components.smart_heating_scheduler.runtime.dt_util.utcnow", return_value=now
+            ),
+        ):
+            await self.runtime.async_evaluate()
+        self.assertEqual(self.runtime.status[zone.id]["target"], 16)
+        self.assertTrue(self.runtime.insight_status[zone.id]["warnings"])
+        self.assertTrue(all(call.data.get("temperature") != 23 for call in self.calls))
+
     async def test_reload_after_startup_does_not_unregister_consumed_listener(self):
         from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 

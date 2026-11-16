@@ -1,3 +1,18 @@
+Local candidate 0.4.0.dev1 - 16 November 2026
+---------------------------------------------
+76 standalone logic/storage tests passed (HA module skipped and run separately).
+33 real HA 2026.11.1 runtime/API tests passed with simulated devices.
+37 frontend model/DOM tests passed, production bundle and self-contained preview built.
+Ruff formatting/lint passed. No new candidate installed on live Home Assistant.
+New coverage: calendar/Workday precedence and lookahead, all-day DST boundaries,
+source failures, nonblocking slow calendar refresh while boost proceeds, revision
+conflicts/reload, history bounds, measured C/F learning, caps/stale data/missing
+readings, preheat restart intent and owner guards, storage failure and unload.
+Browser preview checked at a 388px card container: History, profile editor and
+Learning settings. Desktop History checked. Mini regression controls passed.
+Live multi-cycle learning/calendar/Workday validation remains required before stable.
+See docs/PROFILES_HISTORY_PREHEATING.md. Historical validation follows.
+
 Stable release candidate0.3.0 -16 November2026
 --------------------------------------------
 49 standalone backend tests passed (HA module skipped here and run separately).

@@ -28,6 +28,7 @@ from .const import DOMAIN, STORAGE_VERSION
 from .controller import PreviewController, Zone
 from .controls import Controls
 from .engine import Limits, Observation, ValidationError, Week, number, timestamp
+from .insights import InsightsRepository
 from .repository import Repository
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,6 +41,16 @@ class Runtime(Controls):
             Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}", atomic_writes=True)
         )
         self.controller = PreviewController(self.repository, hass.config.time_zone)
+        self.insights = InsightsRepository(
+            Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.insights", atomic_writes=True)
+        )
+        self.insight_status = {}
+        self._calendar_cache = {}
+        self._workday_cache = {}
+        self._learning_started = set()
+        self._insight_storage_failed = set()
+        self._feature_reads = {}
+        self._insight_generation = 0
         self.zones = {}
         self.mappings = {}
         self.status = {}
@@ -48,11 +59,13 @@ class Runtime(Controls):
         self._cancel_deadline = None
         self._lock = asyncio.Lock()
         self._closed = False
+        self._evaluation_tasks = set()
         self._init_controls()
 
     async def async_setup(self):
         try:
             await self.repository.load()
+            await self.insights.load()
             ids = set()
             for subentry in self.entry.subentries.values():
                 if subentry.subentry_type != "zone":
@@ -84,6 +97,7 @@ class Runtime(Controls):
                 )
                 self.repository.read(zone.id, limits)
                 self.smart_record(zone.id)
+                self.insights.read(zone.id, limits)
             await self.async_evaluate()
         except (ValidationError, ValueError, TypeError, KeyError) as err:
             raise ConfigEntryError(
@@ -130,7 +144,13 @@ class Runtime(Controls):
 
     @callback
     def _changed(self, event):
-        self.hass.async_create_task(self.async_evaluate())
+        if self._closed:
+            return
+        if getattr(event, "event_type", None) == EVENT_CORE_CONFIG_UPDATE:
+            self._invalidate_insights()
+        task = self.hass.async_create_task(self.async_evaluate())
+        self._evaluation_tasks.add(task)
+        task.add_done_callback(self._evaluation_tasks.discard)
 
     @callback
     def _smart_changed(self, event):
@@ -138,7 +158,11 @@ class Runtime(Controls):
         for zid in self.zones:
             policy = self.smart_record(zid)["policy"]
             ids = {i["entity_id"] for i in policy["entities"]} | {policy["timer"]}
+            feature_ids = self.insights.source_ids(zid)
+            ids |= feature_ids
             if eid in ids:
+                if eid in feature_ids:
+                    self._invalidate_insights()
                 self._changed(event)
                 break
 
@@ -237,6 +261,12 @@ class Runtime(Controls):
         if self._closed:
             return
         self._closed = True
+        for task in tuple(self._evaluation_tasks):
+            task.cancel()
+        self._evaluation_tasks.clear()
+        for task in tuple(self._feature_reads.values()):
+            task.cancel()
+        self._feature_reads.clear()
         for listener in tuple(self.listeners):
             listener()
         for unsubscribe in self._unsubscribers:

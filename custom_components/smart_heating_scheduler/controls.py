@@ -11,9 +11,10 @@ from homeassistant.util import dt as dt_util
 
 from . import smart
 from .engine import Hold, ValidationError, timestamp
+from .insight_controls import InsightControls
 
 
-class Controls:
+class Controls(InsightControls):
     def _init_controls(self):
         self._contexts = deque(maxlen=100)
         self._command_state = {}
@@ -125,13 +126,29 @@ class Controls:
             data["external_operation"] = "uncertain"
         if data != original or clear_manual:
             await self.repository.smart_save(zone.id, data, zone.limits, clear_manual=clear_manual)
+        feature_week, feature_record, profile_days, feature_warnings = await self._profile_week(
+            zone, now
+        )
         base = await self.controller.evaluate(
             zone,
             observation,
             now,
             detect_manual=not owned and not data["boost"] and not data["external_operation"],
+            week_override=feature_week,
         )
+        if base.source == "schedule" and profile_days[0]["source"] != "weekly":
+            base = replace(base, reason=f"{profile_days[0]['profile']}: {base.reason}")
         decision = smart.resolve_smart(base, data, effective, now, self.controller.timezone)
+        decision = await self._finish_insights(
+            zone,
+            feature_record,
+            profile_days,
+            feature_warnings,
+            feature_week,
+            decision,
+            effective,
+            now,
+        )
         if deadline:
             decision = replace(decision, next_evaluation=min(deadline, decision.next_evaluation))
         self.smart_status[zone.id] = {"occupancy": effective, "presence_raw": raw, **data}
@@ -234,7 +251,9 @@ class Controls:
             data = self.smart_record(zone_id)
             p, now = data["policy"], dt_util.utcnow()
             observation = self._observation(zone_id)
-            if action == "policy":
+            if action in {"insights", "reset_learning", "clear_history"}:
+                await self._insights_action(zone, action, payload)
+            elif action == "policy":
                 if data["boost"] or observation.external_boost or data["external_operation"]:
                     raise ValidationError("Finish boost handover before changing its configuration")
                 if (
@@ -459,7 +478,8 @@ class Controls:
                 self._command_state.clear()
             else:
                 raise ValidationError("Unsupported control action")
-            await self.repository.smart_save(zone_id, data, zone.limits)
+            if action not in {"insights", "reset_learning", "clear_history"}:
+                await self.repository.smart_save(zone_id, data, zone.limits)
             if action == "policy":
                 self._refresh_completion_listeners()
         await self.async_evaluate()

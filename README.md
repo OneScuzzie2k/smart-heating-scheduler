@@ -1,5 +1,11 @@
 # Smart Heating Scheduler
 
+**Test release 0.4.0.dev1:** optional calendar/Workday day profiles,
+seven-day temperature and decision history, and measured smart preheating are
+implemented for evaluation with companion card 0.4.0-dev.1. This is an opt-in prerelease for field testing; 0.3.1 remains the stable release. Read the [feature guide](docs/PROFILES_HISTORY_PREHEATING.md) for
+setup, priority, learning requirements and validation limits.
+
+
 A Home Assistant custom integration for weekly heating schedules, timed boost, occupancy overrides and holidays, with a separate companion Lovelace card. Configure your own thermostats and occupancy inputs through the UI.
 
 **Stable release:** [integration 0.3.1](https://github.com/OneScuzzie2k/smart-heating-scheduler/releases/tag/0.3.1) and [companion card 0.3.0](https://github.com/OneScuzzie2k/smart-heating-scheduler-card/releases/tag/0.3.0). The backend patch fixes legacy boost-timer migration and startup-listener cleanup on reload. See the [acceptance results and limits](docs/RELEASE_ACCEPTANCE.md).

@@ -82,6 +82,11 @@ def dashboard(hass, entry, user):
                 else None,
                 "error": status.get("error"),
                 "smart": smart,
+                "insights": {
+                    "revision": runtime.insights.read(zone_id, zone.limits)["revision"],
+                    "settings": runtime.insights.read(zone_id, zone.limits)["settings"],
+                    **runtime.insight_status.get(zone_id, {}),
+                },
                 "presence": runtime.smart_status.get(zone_id, {}).get("occupancy", "schedule"),
                 "presence_raw": runtime.smart_status.get(zone_id, {}).get(
                     "presence_raw", "schedule"
@@ -240,6 +245,9 @@ async def save_schedule(hass, connection, msg):
                 "resume",
                 "retry",
                 "mode",
+                "insights",
+                "reset_learning",
+                "clear_history",
             ]
         ),
         vol.Required("payload"): dict,
