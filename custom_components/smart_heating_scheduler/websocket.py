@@ -54,6 +54,7 @@ def dashboard(hass, entry, user):
         timer = hass.states.get(timer_id) if timer_id else None
         builtin = smart["boost"]
         observed = runtime._observation(zone_id)
+        frost_limits = runtime._frost_limits(zone)
         result["zones"].append(
             {
                 "id": zone_id,
@@ -69,6 +70,13 @@ def dashboard(hass, entry, user):
                     "maximum": zone.limits.maximum,
                     "step": zone.limits.step,
                 },
+                "frost_limits": {
+                    "minimum": frost_limits.minimum,
+                    "maximum": frost_limits.maximum,
+                    "step": frost_limits.step,
+                }
+                if frost_limits
+                else None,
                 "manual_policy": zone.manual_policy,
                 "manual_minutes": zone.manual_minutes,
                 "enabled": zone.enabled,

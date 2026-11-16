@@ -29,7 +29,15 @@ def setup():
 
 def run(r, d, o, room=6, age=0, enabled=True):
     return frost.resolve(
-        d, r, o, room, NOW - timedelta(minutes=age), NOW, control_enabled=enabled, step=0.5
+        d,
+        r,
+        o,
+        room,
+        NOW - timedelta(minutes=age),
+        NOW,
+        control_enabled=enabled,
+        step=0.5,
+        hardware_limits=Limits(5, 30, 0.5),
     )
 
 
@@ -104,8 +112,9 @@ def test_disabled_or_lost_reading_returns_owned_cycle_to_off():
 
 def test_unit_aware_limits_are_never_silently_lowered():
     r, _, _ = setup()
+    insights.validate_settings(r["settings"], Limits(16, 30, 0.5))
     with pytest.raises(ValidationError):
-        insights.validate_settings(r["settings"], Limits(16, 30, 0.5))
+        frost.validate(r["settings"], Limits(16, 30, 0.5), hardware_limits=Limits(8, 30, 0.5))
     r["settings"]["frost_target"] = 45
     insights.validate_settings(r["settings"], Limits(40, 85, 1))
     r["settings"]["frost_target"] = 45.5
@@ -118,3 +127,26 @@ def test_off_recovery_target_must_have_headroom_within_reviewed_limits():
     r["settings"]["frost_target"] = 28
     with pytest.raises(ValidationError):
         insights.validate_settings(r["settings"], Limits(5, 28, 0.5))
+
+
+def test_frost_below_normal_minimum_uses_hardware_range_without_changing_schedule_bounds():
+    settings = insights.defaults()
+    settings.update(frost_enabled=True, frost_target=12, frost_while_off=True)
+    normal = Limits(16, 30, 0.5)
+    frost.validate(settings, normal, hardware_limits=Limits(5, 30, 0.5), require_hardware=True)
+    assert normal.minimum == 16
+    with pytest.raises(ValidationError):
+        normal.validate(12)
+    with pytest.raises(ValidationError):
+        frost.validate(settings, normal, hardware_limits=Limits(13, 30, 0.5), require_hardware=True)
+    with pytest.raises(ValidationError):
+        frost.validate(settings, normal, require_hardware=True)
+
+
+def test_frost_recovery_uses_current_hardware_increment():
+    settings = insights.defaults()
+    settings.update(frost_enabled=True, frost_target=12, frost_while_off=True, frost_hysteresis=1)
+    frost.validate(
+        settings, Limits(16, 30, 0.5), hardware_limits=Limits(5, 30, 1), require_hardware=True
+    )
+    assert frost.heat_target(settings, 1) == 14

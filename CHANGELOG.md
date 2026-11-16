@@ -1,3 +1,10 @@
+# 0.5.1 — separate frost minimum (prepared, not yet released)
+
+- Allow frost below the normal schedule/manual minimum without changing normal target limits.
+- Validate frost and recovery targets against the available thermostat’s actual range and current increment, including on save/import and before control.
+- Expose verified frost limits to the card and restore owned Off cycles if capabilities become incompatible.
+- Preserve existing schedules, user settings and Off permission. No automatic frost activation or target changes.
+
 # 0.5.0 — guided setup, frost protection and configuration transfer
 
 - Four-step HA zone wizard with capability-derived suggestions, review and disabled-by-default new zones.

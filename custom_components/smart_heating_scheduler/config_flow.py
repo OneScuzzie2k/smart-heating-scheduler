@@ -12,7 +12,7 @@ from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 
-from . import insights, smart
+from . import frost, insights, smart
 from .const import DOMAIN
 from .engine import Limits, ValidationError, Week, number
 
@@ -221,6 +221,15 @@ class ZoneSubentryFlow(ConfigSubentryFlow):
                     user_input["frost_target"] if features["frost_enabled"] else None
                 )
                 d["initial_features"] = insights.validate_settings(features, limits)
+                attrs = self.hass.states.get(d["climate_entity"]).attributes
+                frost.validate(
+                    features,
+                    limits,
+                    hardware_limits=Limits(
+                        attrs["min_temp"], min(attrs["max_temp"], limits.maximum), limits.step
+                    ),
+                    require_hardware=True,
+                )
                 policy = smart.defaults()["policy"]
                 policy["boost_owner"] = "builtin" if user_input["boost_enabled"] else "none"
                 policy["boost_target"] = (

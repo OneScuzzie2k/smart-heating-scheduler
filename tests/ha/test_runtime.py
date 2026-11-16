@@ -33,6 +33,35 @@ from custom_components.smart_heating_scheduler.sensor import async_setup_entry a
 
 
 class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_lower_frost_range_preserves_normal_limits_and_revalidates_device(self):
+        await self.configure_builtin()
+        self.simulated_receiver()
+        self.hass.states.async_set(
+            "climate.test_zone", "off", {**self.attrs, "current_temperature": 11.5}
+        )
+        await self.runtime.async_evaluate()
+        zone = self.runtime.zones["zone_a"]
+        settings = self.runtime.insights.read(zone.id, zone.limits)["settings"]
+        settings.update(frost_enabled=True, frost_target=12, frost_while_off=True)
+        await self.runtime.async_control_action(
+            "insights", zone.id, {"revision": 1, "settings": settings}
+        )
+        await self.enable_control()
+        await self.hass.async_block_till_done()
+        self.assertEqual(self.runtime.status[zone.id]["target"], 13)
+        self.assertEqual(zone.limits.minimum, 16)
+        current = self.hass.states.get("climate.test_zone")
+        self.hass.states.async_set(
+            "climate.test_zone", "heat", {**current.attributes, "min_temp": 14}
+        )
+        await self.runtime.async_evaluate()
+        await self.hass.async_block_till_done()
+        self.assertEqual(self.hass.states.get("climate.test_zone").state, "off")
+        with self.assertRaises(ValidationError):
+            await self.runtime.async_control_action(
+                "insights", zone.id, {"revision": 2, "settings": settings}
+            )
+
     async def test_frost_storage_failure_never_commands_cold_off_receiver(self):
         await self.configure_builtin()
         self.simulated_receiver()

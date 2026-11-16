@@ -8,7 +8,7 @@ from datetime import UTC, datetime, time, timedelta
 from homeassistant.exceptions import HomeAssistantError
 
 from . import frost, insights
-from .engine import Hold, ValidationError, Week
+from .engine import Hold, Limits, ValidationError, Week
 
 
 def event_time(value, timezone):
@@ -19,6 +19,21 @@ def event_time(value, timezone):
 
 
 class InsightControls:
+    def _frost_limits(self, zone):
+        observation = self._observation(zone.id)
+        entity = self.hass.states.get(self.mappings[zone.id][0])
+        if not entity or not observation.available or not observation.supported:
+            return None
+        attrs = entity.attributes
+        try:
+            return Limits(
+                attrs["min_temp"],
+                min(attrs["max_temp"], zone.limits.maximum),
+                attrs.get("target_temp_step"),
+            )
+        except (ValidationError, KeyError, TypeError):
+            return None
+
     async def _read_feature_service(self, domain, service, data):
         async with asyncio.timeout(10):
             return await self.hass.services.async_call(
@@ -184,6 +199,8 @@ class InsightControls:
             now,
             control_enabled=self.repository.control_enabled,
             step=zone.limits.step,
+            hardware_limits=self._frost_limits(zone),
+            reviewed_limits=zone.limits,
             settling=bool(
                 self._command_state.get(zone.id) and self._command_state[zone.id][2] > now
             ),
@@ -266,6 +283,12 @@ class InsightControls:
             raise ValidationError("Zone features changed elsewhere; reload before saving")
         if action == "insights":
             settings = insights.validate_settings(payload["settings"], zone.limits)
+            frost.validate(
+                settings,
+                zone.limits,
+                hardware_limits=self._frost_limits(zone),
+                require_hardware=True,
+            )
             ids = {settings["workday_entity"]} | {
                 r["entity_id"] for r in settings["calendar_rules"]
             }
@@ -329,6 +352,12 @@ class InsightControls:
         Week.parse(data["week"], zone.limits)
         candidate = deepcopy(old)
         candidate["settings"] = insights.validate_settings(data["features"], zone.limits)
+        frost.validate(
+            candidate["settings"],
+            zone.limits,
+            hardware_limits=self._frost_limits(zone),
+            require_hardware=True,
+        )
         candidate["preheat"] = None
         candidate["revision"] += 1
         policy_record = deepcopy(current)

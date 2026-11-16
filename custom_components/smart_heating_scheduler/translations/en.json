@@ -83,7 +83,7 @@
         },
         "limits": {
           "title": "2 \u00b7 Review temperatures",
-          "description": "These values use {unit}. The all-day target is a simple starting schedule for all seven days; edit periods visually in the card afterwards. Review the minimum carefully before using a low frost target.",
+          "description": "These values use {unit} and apply to normal schedule and manual targets. The all-day target fills all seven days until edited in the card. Frost has a separate lower range checked against the thermostat hardware.",
           "data": {
             "minimum": "Minimum allowed target",
             "maximum": "Maximum allowed target",

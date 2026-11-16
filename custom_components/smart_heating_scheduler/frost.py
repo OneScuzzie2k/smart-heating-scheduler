@@ -17,18 +17,37 @@ def defaults():
     }
 
 
-def validate(settings, limits):
+def validate_target(value, limits, hardware_limits=None):
+    """Normal lower bounds do not apply to an explicitly configured frost floor."""
+    value = number(value)
+    if value > limits.maximum:
+        raise ValidationError("Frost target exceeds the reviewed maximum")
+    if limits.step and not math.isclose(
+        value / limits.step, round(value / limits.step), abs_tol=1e-6
+    ):
+        raise ValidationError("Frost target does not match the thermostat increment")
+    if hardware_limits is not None:
+        hardware_limits.validate(value)
+
+
+def validate(settings, limits, *, hardware_limits=None, require_hardware=False):
     for key in ("frost_enabled", "frost_while_off"):
         if type(settings[key]) is not bool:
             raise ValidationError("Frost switches must be explicit")
     if settings["frost_target"] is not None:
-        limits.validate(settings["frost_target"])
+        validate_target(settings["frost_target"], limits, hardware_limits)
     if settings["frost_enabled"] and settings["frost_target"] is None:
-        raise ValidationError("Review a frost target within this zone's limits first")
+        raise ValidationError("Review a supported frost target first")
+    if settings["frost_enabled"] and require_hardware and hardware_limits is None:
+        raise ValidationError("An available thermostat is required to verify the frost range")
     if not 0.1 <= number(settings["frost_hysteresis"]) <= 3:
         raise ValidationError("Frost recovery margin must be 0.1 to 3 temperature units")
     if settings["frost_enabled"] and settings["frost_while_off"]:
-        limits.validate(heat_target(settings, limits.step))
+        validate_target(
+            heat_target(settings, hardware_limits.step if hardware_limits else limits.step),
+            limits,
+            hardware_limits,
+        )
     age = settings["frost_max_age_minutes"]
     if type(age) is not int or not 5 <= age <= 180:
         raise ValidationError("Frost reading age must be 5 to 180 minutes")
@@ -55,6 +74,8 @@ def resolve(
     control_enabled,
     settling=False,
     step=None,
+    hardware_limits=None,
+    reviewed_limits=None,
 ):
     """Never bypass device/zone/boost guards or lower another owner's target.
 
@@ -90,7 +111,17 @@ def resolve(
     if decision.source == "boost":
         info["state"] = "waiting" if s["frost_enabled"] else "disabled"
         return decision, info
-    valid = type(room) in (int, float)
+    if hardware_limits is not None:
+        step = hardware_limits.step
+    hardware_valid = hardware_limits is not None
+    if hardware_valid:
+        try:
+            validate(s, reviewed_limits or hardware_limits, hardware_limits=hardware_limits)
+            if cycle:
+                hardware_limits.validate(cycle["target"])
+        except ValidationError:
+            hardware_valid = False
+    valid = hardware_valid and type(room) in (int, float)
     if valid:
         try:
             number(room)
@@ -158,7 +189,7 @@ def validate_cycle(cycle, limits):
     if cycle is not None:
         if not isinstance(cycle, dict) or set(cycle) != {"target", "release_at", "since"}:
             raise ValidationError("Invalid frost recovery intent")
-        limits.validate(cycle["target"])
-        if not limits.minimum <= number(cycle["release_at"]) < cycle["target"]:
+        validate_target(cycle["target"], limits)
+        if not number(cycle["release_at"]) < cycle["target"]:
             raise ValidationError("Invalid frost recovery threshold")
         timestamp(cycle["since"])

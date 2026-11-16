@@ -1,3 +1,10 @@
+0.5.1 frost-range patch - local validation
+-----------------------------------------
+98 standalone tests,38 real-HA simulated runtime tests and43 frontend/model/DOM
+tests pass. Production card build, Ruff and diff checks pass. Includes12C frost with16C normal minimum, physical range rejection,
+current increments and capability-change Off restoration. Live HA remains0.5.0;
+Chrome extension requires update before publication/installation can continue.
+
 0.5.0 candidate -16 November2026
 --------------------------------
 96 standalone tests,37 real-HA simulated runtime tests,42 frontend/model/DOM tests.
