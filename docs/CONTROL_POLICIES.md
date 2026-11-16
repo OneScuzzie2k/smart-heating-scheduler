@@ -1,4 +1,4 @@
-# Smart control policies — development candidate
+# Smart control policies — 0.3.0
 
 New installations start in **observe only**. Boost, holiday and presence actions update durable proposals; no climate/script/helper commands are sent in that mode. The card always identifies sample data, observe-only or heating-control mode.
 
@@ -24,6 +24,8 @@ Built-in boost validates target and duration, saves its original absolute deadli
 
 External adapters declare a fixed target, duration/default/maximum, start/cancel scripts, timer and optional duration helper. This adapter does not inject a temperature into arbitrary scripts. Direct script calls are awaited rather than launching `script.turn_on`. Helper min/max/step constrain requested durations. The timer must confirm start and release after cancel. Scripts are never called in observe-only mode and are not blindly retried after a partial failure.
 
+External timer restoration is a separate helper setting, not managed by this integration. Enable the timer's **Restore state and time when Home Assistant starts** option if countdown continuity is required. Acceptance must cover an active boost across a restart as well as expiry during downtime. A completion automation cannot be assumed to have run while HA was stopped; an idle timer after startup does not release uncertain ownership by itself.
+
 For automatic expiry handover, optionally map a custom completion event, one event-data field, and its exact value. The event must be emitted **after all receiver restoration actions complete**. Timer release alone cannot prove this. A matching completion signal releases the guard only with a known idle timer. Without it, timer release or uncertain script execution inhibits writes until the administrator checks restoration and confirms it in the card. Active ownership is persisted, including when HA is offline at expiry. An unknown/paused timer never silently gives control back. Verify the actual script/event contract before hardware testing.
 
 Generic climate commands are serialized, compared against observed mode/target and throttled. Unconfirmed commands get at most three attempts with bounded delays, then a visible fault and explicit Retry controls. Unavailable/unsupported entities inhibit commands. Own-context and exact pending-command confirmations do not become manual holds. Other native changes remain manual changes; HA cannot always identify which other automation caused one. Device-specific hold handling stays separate and must be retained until tested replacement support exists.
@@ -36,6 +38,6 @@ Authenticated WebSocket API schema 1 adds optional `smart`, `presence` and boost
 
 The existing `update_schedule` and `resume_preview` services remain administrator-only. Saving a schedule can affect heating when control mode is enabled. `resume_preview` clears the stored hold but does not switch on a physically Off thermostat; use the card's explicit Resume schedule action to do that after takeover.
 
-## Remaining release work
+## Follow-up work
 
-This is a test candidate, not a HACS release or completed hardware integration. Remaining work includes full HA bootstrap/config-flow/platform tests, supported Linux testing, physical receiver and wall-control acceptance, accessibility/zoom/theme review, installation defaults with explicit per-zone inheritance, bulk holiday scope, external display-sensor configuration, richer return/off policies, import/export, translations and release metadata/licensing. Basic per-zone settings already work independently. Do not label unimplemented bulk/inheritance options as available.
+Version 0.3.0 is distributed as a custom Marketplace repository in HACS-compatible format. Live expiry, holiday and restart acceptance is recorded in [release acceptance](RELEASE_ACCEPTANCE.md); it covers one heating installation. Follow-up work includes full HA bootstrap/config-flow/platform tests, broader physical receiver and wall-control acceptance, accessibility/zoom/theme review, installation defaults with explicit per-zone inheritance, bulk holiday scope, external display-sensor configuration, richer return/off policies, import/export and translations. Basic per-zone settings already work independently. Bulk/inheritance options are not available in this release.

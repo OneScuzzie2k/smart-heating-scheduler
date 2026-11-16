@@ -2,7 +2,7 @@
 
 A Home Assistant custom integration for weekly heating schedules, timed boost, occupancy overrides and holidays, with a separate companion Lovelace card. Configure your own thermostats and occupancy inputs through the UI.
 
-**Early-access pre-release.** Current integration: [0.3.0.dev2](https://github.com/OneScuzzie2k/smart-heating-scheduler/releases/tag/0.3.0.dev2). Companion card: [0.3.0-dev.5](https://github.com/OneScuzzie2k/smart-heating-scheduler-card/releases/tag/0.3.0-dev.5). These are the tested version pair; broader device and restart/expiry acceptance is ongoing.
+**Stable release 0.3.0:** [integration](https://github.com/OneScuzzie2k/smart-heating-scheduler/releases/tag/0.3.0) and [companion card](https://github.com/OneScuzzie2k/smart-heating-scheduler-card/releases/tag/0.3.0). This promotes the tested development builds with additional restart regression coverage and installation guidance. See the [acceptance results and limits](docs/RELEASE_ACCEPTANCE.md).
 
 **[Installation and setup guide](docs/INSTALLATION.md)** - install both packages, add zones, configure the card and move from observe-only to heating control.
 
@@ -27,7 +27,7 @@ Read [control policies](docs/CONTROL_POLICIES.md) for priority, configuration, a
 
 ## Testing
 
-For backend development, use an isolated HA instance with simulated entities. API tests use real HA 2026.11.1 objects and simulated states. A supervised two-zone installation has also exercised schedule transitions, manual targets, boost start/cancel and occupancy activation; this does not establish compatibility with every thermostat. Automatic boost expiry, holiday and restart recovery still need broader field acceptance.
+For backend development, use an isolated HA instance with simulated entities. API tests use real HA 2026.11.1 objects and simulated states. A supervised two-zone installation has also exercised schedule transitions, manual targets, occupancy activation, natural external boost expiry, holidays and Core restart recovery. Active external boosts recovered and expired at their original deadlines with timer restoration enabled. This does not establish compatibility with every thermostat; see [acceptance scope](docs/RELEASE_ACCEPTANCE.md).
 
 ```powershell
 $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'
@@ -41,8 +41,8 @@ The HA test command requires Python >=3.14.2 with homeassistant==2026.11.1; stan
 
 1. Open **Settings > Marketplace > Add from link** and add this repository as an **Integration**:
    `https://github.com/OneScuzzie2k/smart-heating-scheduler`.
-2. Enable **Include pre-releases**, select **0.3.0.dev2**, and install. Follow any restart prompt.
-3. Add the [companion card repository](https://github.com/OneScuzzie2k/smart-heating-scheduler-card) the same way as a **Dashboard** item; select **0.3.0-dev.5** and reload your browser after installation.
+2. Select stable version **0.3.0** and install. Follow any restart prompt. Including pre-releases is not required.
+3. Add the [companion card repository](https://github.com/OneScuzzie2k/smart-heating-scheduler-card) the same way as a **Dashboard** item; select **0.3.0** and reload your browser after installation.
 4. Open **Settings > Devices & services > Add integration**, search for **Smart Heating Scheduler (Preview)** and complete setup. Open its integration entry and choose **Add heating zone** for each thermostat.
 5. Add **Smart Heating Scheduler** from your dashboard's card picker, select the scheduler and build your weekly schedules while still in observe-only mode.
 
@@ -52,4 +52,4 @@ The HA test command requires Python >=3.14.2 with homeassistant==2026.11.1; stan
 
 ## Distribution status
 
-Published public GitHub pre-releases, available as custom Marketplace repositories. Catalog inclusion and a stable release are pending. Full bootstrap/config-flow coverage, more heating hardware, automatic expiry/restart field acceptance, inheritance/bulk configuration, import/export, accessibility and translations remain release work. MIT licensed. Public packages exclude home-specific audit and handover files.
+Published public GitHub releases, available as custom Marketplace repositories. Catalog inclusion is pending. Full bootstrap/config-flow coverage, more heating hardware, inheritance/bulk configuration, import/export, accessibility and translations remain follow-up work. The historical Preview integration/entry names are retained in this release; the card reports actual control mode. MIT licensed. Public packages exclude home-specific audit and handover files.

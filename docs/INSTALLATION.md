@@ -1,6 +1,6 @@
 # Installation and setup
 
-This guide covers integration **0.3.0.dev2** with companion card **0.3.0-dev.5**. Both are early-access pre-releases. Start with observe-only comparison before a supervised heating-control test.
+This guide covers stable integration **0.3.0** with companion card **0.3.0**. Start with observe-only comparison before a supervised heating-control test. See [release acceptance](RELEASE_ACCEPTANCE.md) for the tested setup and limits.
 
 ## Requirements
 
@@ -20,10 +20,10 @@ Choose **Add from link**, enter each GitHub repository URL and confirm the repos
 
 | Package | GitHub repository | Type | Version |
 | --- | --- | --- | --- |
-| Backend | https://github.com/OneScuzzie2k/smart-heating-scheduler | Integration | `0.3.0.dev2` |
-| Companion card | https://github.com/OneScuzzie2k/smart-heating-scheduler-card | Dashboard | `0.3.0-dev.5` |
+| Backend | https://github.com/OneScuzzie2k/smart-heating-scheduler | Integration | `0.3.0` |
+| Companion card | https://github.com/OneScuzzie2k/smart-heating-scheduler-card | Dashboard | `0.3.0` |
 
-Open the repository's menu and enable **Include pre-releases** to see development releases. If necessary, use **Install another version** to choose the tag above. Prefer these tagged versions for reproducible testing. A short commit hash in the installed-version display means a default-branch build; record it when reporting an issue.
+Select the stable versions above; **Include pre-releases** is not required. If necessary, use **Install another version** to choose the tag. Prefer tagged versions for reproducible installations. A short commit hash in the installed-version display means a default-branch build; record it when reporting an issue. Enable Include pre-releases only if deliberately testing a development release.
 
 Follow any backend restart prompt. Marketplace can load a newly installed integration with a config flow immediately; an update may need a restart. Reload every browser/Companion App frontend after installing the card. Marketplace normally registers its JavaScript resource automatically; YAML-managed resources need the entry shown by the install dialog.
 
@@ -83,6 +83,8 @@ In the full card's **Settings**, select a zone and review **Boost adapter**:
 
 External scripts/timers/helpers must be separate for each zone. Preserve their supporting expiry/restoration automations. For automatic external expiry handover, configure a completion event emitted **after restoration finishes**, with an exact data-field/value filter. Without that signal, timer expiry can pause scheduler writes pending an administrator's restoration confirmation. See the [external adapter contract](CONTROL_POLICIES.md#boost-ownership-and-commands) before using an existing boost system.
 
+For a countdown that survives an HA restart, enable **Restore state and time when Home Assistant starts** on each external timer helper. Verify this in the helper's settings; the scheduler does not change it for you. Test an active boost through a restart before relying on this adapter unattended. Restoration preserves the original deadline, not a new full duration. If a timer expires while HA is offline, do not assume its normal expiry automation and completion event ran: inspect receiver restoration and use the card's explicit confirmation when needed. A restored idle timer alone is not proof of completed restoration.
+
 ### Occupancy override
 
 In **Settings > Occupancy override**, enable the feature for the selected zone, choose the minimum target, people/sensors, occupied/unoccupied state meanings, weekdays and start/end hours, then save. The minimum applies only while occupied inside that window; a higher scheduled target is retained. Leave the optional unoccupied target empty to follow the weekly schedule while away. Configure delays and unknown-state fallback to suit the setup. Downstairs or other zones are unaffected unless configured independently.
@@ -129,7 +131,7 @@ The built release bundle is ready to use. End users do not need to build the car
 
 | Symptom | Check |
 | --- | --- |
-| No release offered | Core is at least 2026.11.1; both repositories added; GitHub connected; Include pre-releases enabled; refresh repository information. |
+| No release offered | Core is at least 2026.11.1; both repositories added; GitHub connected; refresh repository information; choose stable 0.3.0. Include pre-releases is only needed for development versions. |
 | Integration not in Add integration | Backend files installed in the correct folder; follow restart prompt; search for Smart Heating Scheduler (Preview); inspect HA logs. |
 | Card type not found | Card repository installed; resource registered as a module once; reload the browser/app frontend. |
 | No scheduler or zones | Finish backend setup, choose Scheduler in the visual editor, add a zone, and confirm the user's entity permissions. |

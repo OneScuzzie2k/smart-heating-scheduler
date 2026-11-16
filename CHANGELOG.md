@@ -1,3 +1,11 @@
+# 0.3.0 - first stable release
+
+- Promote the tested multi-zone scheduler with schedules, boost, occupancy override, holidays and explicit observe-only/heating-control handover.
+- Add real-HA runtime regression coverage for an active built-in boost through restart and holiday return while a receiver is unavailable.
+- Complete live two-zone external boost expiry, holiday activation/cancel/return and Core restart acceptance. External countdown continuity requires timer helper restoration enabled; expiry during downtime can require explicit restoration confirmation.
+- Update installation guidance and publish the scope and limits in `docs/RELEASE_ACCEPTANCE.md`. Compatible with companion card 0.3.0; requires Home Assistant Core 2026.11.1+.
+- Preserve existing storage, API, schedule and control-mode behavior. Historical Preview setup names remain for this release.
+
 # 0.3.0.dev2 - zone setup lifecycle fix
 
 Reload the integration when zone subentries change, so newly added zones become available without a manual reload. Classify the multi-zone scheduler as a service so HA displays its zone subentries and management controls. Adds a real-HA config-entry update-listener test. Existing schedules and control-mode intent are preserved.

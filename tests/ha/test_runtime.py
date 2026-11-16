@@ -33,6 +33,80 @@ from custom_components.smart_heating_scheduler.sensor import async_setup_entry a
 
 
 class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_active_builtin_boost_restart_preserves_deadline_and_resumes_rules(self):
+        from datetime import timedelta
+
+        from homeassistant.util import dt as dt_util
+
+        self.simulated_receiver()
+        await self.configure_builtin()
+        await self.enable_control()
+        now = dt_util.utcnow()
+        await self.runtime.async_control_action(
+            "boost_start", "zone_a", {"target": 23, "minutes": 5}
+        )
+        deadline = self.runtime.smart_record("zone_a")["boost"]["until"]
+        self.runtime.close()
+        self.runtime = Runtime(self.hass, self.entry)
+        self.entry.runtime_data = self.runtime
+        with patch(
+            "custom_components.smart_heating_scheduler.runtime.dt_util.utcnow",
+            return_value=now + timedelta(minutes=2),
+        ):
+            await self.runtime.async_setup()
+        self.assertTrue(self.runtime.repository.control_enabled)
+        self.assertEqual(self.runtime.smart_record("zone_a")["boost"]["until"], deadline)
+        self.assertEqual(self.runtime.status["zone_a"]["source"], "boost")
+        self.assertEqual(self.hass.states.get("climate.test_zone").attributes["temperature"], 23)
+        with patch(
+            "custom_components.smart_heating_scheduler.runtime.dt_util.utcnow",
+            return_value=now + timedelta(minutes=6),
+        ):
+            await self.runtime.async_evaluate()
+        self.assertIsNone(self.runtime.smart_record("zone_a")["boost"])
+        self.assertEqual(self.runtime.status["zone_a"]["source"], "schedule")
+        self.assertEqual(self.hass.states.get("climate.test_zone").attributes["temperature"], 20)
+
+    async def test_offline_holiday_return_waits_for_device_then_applies_current_rules(self):
+        from datetime import timedelta
+
+        from homeassistant.util import dt as dt_util
+
+        self.simulated_receiver()
+        await self.configure_builtin()
+        await self.enable_control()
+        now = dt_util.utcnow()
+        await self.runtime.async_control_action(
+            "holiday",
+            "zone_a",
+            {
+                "start": now.isoformat(),
+                "end": (now + timedelta(minutes=1)).isoformat(),
+                "target": 17,
+            },
+        )
+        self.assertEqual(self.hass.states.get("climate.test_zone").attributes["temperature"], 17)
+        self.runtime.close()
+        self.hass.states.async_set("climate.test_zone", "unavailable", self.attrs)
+        self.calls.clear()
+        self.runtime = Runtime(self.hass, self.entry)
+        self.entry.runtime_data = self.runtime
+        with patch(
+            "custom_components.smart_heating_scheduler.runtime.dt_util.utcnow",
+            return_value=now + timedelta(minutes=2),
+        ):
+            await self.runtime.async_setup()
+            self.assertEqual(self.calls, [])
+            self.assertEqual(self.runtime.status["zone_a"]["source"], "unavailable")
+            self.hass.states.async_set(
+                "climate.test_zone", "heat", {**self.attrs, "temperature": 17}
+            )
+            await self.runtime.async_evaluate()
+        self.assertTrue(self.runtime.repository.control_enabled)
+        self.assertIsNone(self.runtime.smart_record("zone_a")["holiday"])
+        self.assertEqual(self.runtime.status["zone_a"]["source"], "schedule")
+        self.assertEqual(self.hass.states.get("climate.test_zone").attributes["temperature"], 20)
+
     async def test_added_zone_subentry_triggers_integration_reload(self):
         from homeassistant.config_entries import ConfigSubentry
 

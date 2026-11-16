@@ -1,3 +1,26 @@
+Stable release candidate0.3.0 -16 November2026
+--------------------------------------------
+49 standalone backend tests passed (HA module skipped here and run separately).
+26 real Home Assistant2026.11.1 API/runtime tests passed with simulated devices.
+32 frontend model/DOM tests passed; production bundle built successfully.
+Ruff checks/formatting and git diff whitespace checks passed.
+New restart regressions preserve built-in boost deadline/current-rule expiry and
+handle a holiday ending while the thermostat is unavailable at startup.
+
+Live acceptance on a two-zone Hive installation:
+- Natural external boost expiry and completion handover, both zones.
+- Scheduled holiday activation, blocked external boost, cancellation and return.
+- Core restart preserves control-mode intent and active holiday deadline.
+- Holiday ends during startup; commands wait for available receiver then resume.
+- Active external boosts survive Core restart with timer restoration enabled,
+  retain original deadlines, expire naturally and return to current rules.
+- Temporary test holidays/boosts cleared; original timer settings restored.
+
+See docs/RELEASE_ACCEPTANCE.md for scope and limits. This is not evidence of
+universal hardware compatibility or full server-bootstrap lifecycle coverage.
+Timer restoration is separately configured; offline expiry may need explicit
+receiver-restoration confirmation. Private live proof is excluded from repo.
+The historical development validation record follows.
 Phase 3 development candidate 0.3.0.dev1 - 15 November 2026
 
 Passed locally:
