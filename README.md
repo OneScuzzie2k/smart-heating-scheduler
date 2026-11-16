@@ -12,6 +12,20 @@ No separate add-on, third-party scheduler card, Node.js or user-installed Python
 
 New installations start in **observe only**. Heating control is a separate administrator action after reviewing every enabled zone.
 
+## Screenshots
+
+The companion card on desktop and phone. These screenshots use sample data from the working 0.3.0 card, disconnected from Home Assistant.
+
+**Desktop weekly planner**
+
+<img src="docs/screenshots/weekly-planner-desktop.jpg" alt="Dark desktop weekly heating planner with seven-day temperature timelines and a period editor" width="960">
+
+| Mobile schedule editor | Mini thermostat and boost cards |
+| --- | --- |
+| <img src="docs/screenshots/schedule-mobile.jpg" alt="Light mobile schedule editor with zone and weekday selection" width="300"> | <img src="docs/screenshots/mini-cards-mobile.jpg" alt="Two compact thermostat cards with interactive target dials, boost duration sliders and boost buttons" width="300"> |
+
+[View the full dashboard screenshot](docs/screenshots/dashboard-desktop.jpg). Both full and mini layouts are included in the [companion card](https://github.com/OneScuzzie2k/smart-heating-scheduler-card).
+
 ## Working features
 
 - Reviewed per-zone thermostat mappings, limits, units and seven-day schedules.
