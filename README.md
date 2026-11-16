@@ -2,7 +2,7 @@
 
 A Home Assistant custom integration for weekly heating schedules, timed boost, occupancy overrides and holidays, with a separate companion Lovelace card. Configure your own thermostats and occupancy inputs through the UI.
 
-**Stable release 0.3.0:** [integration](https://github.com/OneScuzzie2k/smart-heating-scheduler/releases/tag/0.3.0) and [companion card](https://github.com/OneScuzzie2k/smart-heating-scheduler-card/releases/tag/0.3.0). This promotes the tested development builds with additional restart regression coverage and installation guidance. See the [acceptance results and limits](docs/RELEASE_ACCEPTANCE.md).
+**Stable release:** [integration 0.3.1](https://github.com/OneScuzzie2k/smart-heating-scheduler/releases/tag/0.3.1) and [companion card 0.3.0](https://github.com/OneScuzzie2k/smart-heating-scheduler-card/releases/tag/0.3.0). The backend patch fixes legacy boost-timer migration and startup-listener cleanup on reload. See the [acceptance results and limits](docs/RELEASE_ACCEPTANCE.md).
 
 **[Installation and setup guide](docs/INSTALLATION.md)** - install both packages, add zones, configure the card and move from observe-only to heating control.
 
@@ -55,7 +55,7 @@ The HA test command requires Python >=3.14.2 with homeassistant==2026.11.1; stan
 
 1. Open **Settings > Marketplace > Add from link** and add this repository as an **Integration**:
    `https://github.com/OneScuzzie2k/smart-heating-scheduler`.
-2. Select stable version **0.3.0** and install. Follow any restart prompt. Including pre-releases is not required.
+2. Select stable integration version **0.3.1** and install. Follow any restart prompt. Including pre-releases is not required.
 3. Add the [companion card repository](https://github.com/OneScuzzie2k/smart-heating-scheduler-card) the same way as a **Dashboard** item; select **0.3.0** and reload your browser after installation.
 4. Open **Settings > Devices & services > Add integration**, search for **Smart Heating Scheduler (Preview)** and complete setup. Open its integration entry and choose **Add heating zone** for each thermostat.
 5. Add **Smart Heating Scheduler** from your dashboard's card picker, select the scheduler and build your weekly schedules while still in observe-only mode.

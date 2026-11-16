@@ -106,9 +106,17 @@ class Runtime(Controls):
         self._unsubscribers.append(
             self.hass.bus.async_listen(EVENT_STATE_CHANGED, self._smart_changed)
         )
-        self._unsubscribers.append(
-            self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, self._changed)
-        )
+
+        @callback
+        def started(event):
+            # HA removes a one-shot listener before calling it. Do not try to
+            # unregister that consumed listener again during a later reload.
+            if cancel_started in self._unsubscribers:
+                self._unsubscribers.remove(cancel_started)
+            self._changed(event)
+
+        cancel_started = self.hass.bus.async_listen_once(EVENT_HOMEASSISTANT_STARTED, started)
+        self._unsubscribers.append(cancel_started)
         if tracked:
             self._unsubscribers.append(
                 async_track_entity_registry_updated_event(

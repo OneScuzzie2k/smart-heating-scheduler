@@ -33,6 +33,47 @@ from custom_components.smart_heating_scheduler.sensor import async_setup_entry a
 
 
 class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reload_after_startup_does_not_unregister_consumed_listener(self):
+        from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
+
+        await self.runtime.async_setup()
+        self.hass.bus.async_fire(EVENT_HOMEASSISTANT_STARTED)
+        await self.hass.async_block_till_done(wait_background_tasks=True)
+        with self.assertNoLogs("homeassistant.core", level="ERROR"):
+            self.runtime.close()
+            self.runtime.close()
+
+    async def test_zone_settings_clear_obsolete_timer_only_after_card_policy_migration(self):
+        await self.configure_builtin()
+        self.hass.states.async_remove("timer.test_boost")
+        flow = ZoneSubentryFlow()
+        flow.hass = self.hass
+        subentry = self.entry.subentries["zone_a"]
+        with (
+            patch.object(ZoneSubentryFlow, "_get_entry", return_value=self.entry),
+            patch.object(ZoneSubentryFlow, "_get_reconfigure_subentry", return_value=subentry),
+            patch.object(
+                ZoneSubentryFlow,
+                "async_update_reload_and_abort",
+                return_value={"type": "abort", "reason": "reconfigure_successful"},
+            ) as update,
+        ):
+            form = await flow.async_step_settings()
+            timer_field = next(
+                key for key in form["data_schema"].schema if key.schema == "boost_timer"
+            )
+            self.assertEqual(timer_field.default(), "")
+            requested = {**dict(subentry.data), "boost_timer": ""}
+            result = await flow.async_step_settings(requested)
+            self.assertEqual(result["reason"], "reconfigure_successful")
+            self.assertEqual(update.call_args.kwargs["data"]["boost_timer"], "")
+            update.reset_mock()
+            self.hass.states.async_set("timer.unrelated", "idle")
+            result = await flow.async_step_settings({**requested, "boost_timer": "timer.unrelated"})
+            self.assertEqual(result["errors"]["base"], "invalid_zone")
+            update.assert_not_called()
+        self.assertEqual(self.calls, [])
+
     async def test_active_builtin_boost_restart_preserves_deadline_and_resumes_rules(self):
         from datetime import timedelta
 

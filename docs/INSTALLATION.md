@@ -1,6 +1,6 @@
 # Installation and setup
 
-This guide covers stable integration **0.3.0** with companion card **0.3.0**. Start with observe-only comparison before a supervised heating-control test. See [release acceptance](RELEASE_ACCEPTANCE.md) for the tested setup and limits.
+This guide covers stable integration **0.3.1** with companion card **0.3.0**. Start with observe-only comparison before a supervised heating-control test. See [release acceptance](RELEASE_ACCEPTANCE.md) for the tested setup and limits.
 
 ## Requirements
 
@@ -20,7 +20,7 @@ Choose **Add from link**, enter each GitHub repository URL and confirm the repos
 
 | Package | GitHub repository | Type | Version |
 | --- | --- | --- | --- |
-| Backend | https://github.com/OneScuzzie2k/smart-heating-scheduler | Integration | `0.3.0` |
+| Backend | https://github.com/OneScuzzie2k/smart-heating-scheduler | Integration | `0.3.1` |
 | Companion card | https://github.com/OneScuzzie2k/smart-heating-scheduler-card | Dashboard | `0.3.0` |
 
 Select the stable versions above; **Include pre-releases** is not required. If necessary, use **Install another version** to choose the tag. Prefer tagged versions for reproducible installations. A short commit hash in the installed-version display means a default-branch build; record it when reporting an issue. Enable Include pre-releases only if deliberately testing a development release.
@@ -85,6 +85,8 @@ External scripts/timers/helpers must be separate for each zone. Preserve their s
 
 For a countdown that survives an HA restart, enable **Restore state and time when Home Assistant starts** on each external timer helper. Verify this in the helper's settings; the scheduler does not change it for you. Test an active boost through a restart before relying on this adapter unattended. Restoration preserves the original deadline, not a new full duration. If a timer expires while HA is offline, do not assume its normal expiry automation and completion event ran: inspect receiver restoration and use the card's explicit confirmation when needed. A restored idle timer alone is not proof of completed restoration.
 
+When migrating an existing zone to built-in boost, finish any active external boost, choose Built-in timed boost in the card, clear all external mappings and save. Under **Manage zones in Home Assistant > Configure > Zone settings**, review and submit each migrated zone so its initial setup mapping also matches the active policy. Version 0.3.1 permits this cleanup after an old timer has been deleted. Verify built-in start/cancel/expiry and restart recovery before removing old scripts, helpers, expiry automations or dashboard buttons. Preserve device-specific receiver support.
+
 ### Occupancy override
 
 In **Settings > Occupancy override**, enable the feature for the selected zone, choose the minimum target, people/sensors, occupied/unoccupied state meanings, weekdays and start/end hours, then save. The minimum applies only while occupied inside that window; a higher scheduled target is retained. Leave the optional unoccupied target empty to follow the weekly schedule while away. Configure delays and unknown-state fallback to suit the setup. Downstairs or other zones are unaffected unless configured independently.
@@ -131,7 +133,7 @@ The built release bundle is ready to use. End users do not need to build the car
 
 | Symptom | Check |
 | --- | --- |
-| No release offered | Core is at least 2026.11.1; both repositories added; GitHub connected; refresh repository information; choose stable 0.3.0. Include pre-releases is only needed for development versions. |
+| No release offered | Core is at least 2026.11.1; both repositories added; GitHub connected; refresh repository information; choose integration 0.3.1 and card 0.3.0. Include pre-releases is only needed for development versions. |
 | Integration not in Add integration | Backend files installed in the correct folder; follow restart prompt; search for Smart Heating Scheduler (Preview); inspect HA logs. |
 | Card type not found | Card repository installed; resource registered as a module once; reload the browser/app frontend. |
 | No scheduler or zones | Finish backend setup, choose Scheduler in the visual editor, add a zone, and confirm the user's entity permissions. |

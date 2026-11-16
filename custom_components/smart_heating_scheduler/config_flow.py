@@ -144,6 +144,12 @@ class ZoneSubentryFlow(ConfigSubentryFlow):
         entry = self._get_entry()
         subentry = self._get_reconfigure_subentry() if step_id == "settings" else None
         defaults = dict(subentry.data) if subentry else {}
+        if subentry and getattr(entry, "runtime_data", None):
+            # The card policy owns boost mappings after initial setup. Showing
+            # its current timer also lets a migrated zone shed a deleted helper.
+            defaults["boost_timer"] = entry.runtime_data.smart_record(subentry.subentry_id)[
+                "policy"
+            ]["timer"]
         if defaults.get("climate_registry_id"):
             resolved = er.async_resolve_entity_id(
                 er.async_get(self.hass), defaults["climate_registry_id"]
@@ -180,12 +186,12 @@ class ZoneSubentryFlow(ConfigSubentryFlow):
                     )
                     if record is None:
                         raise ValidationError("Zone storage is unavailable")
-                    entry.runtime_data.repository.smart_read(
+                    smart_record = entry.runtime_data.repository.smart_read(
                         subentry.subentry_id,
                         Limits(data["minimum"], data["maximum"], data["step"]),
                         subentry.data.get("boost_timer", ""),
                     )
-                    if data.get("boost_timer", "") != subentry.data.get("boost_timer", ""):
+                    if data.get("boost_timer", "") != smart_record["policy"]["timer"]:
                         raise ValidationError(
                             "Manage boost ownership and timer mappings in the card Settings"
                         )
