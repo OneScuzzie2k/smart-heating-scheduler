@@ -33,6 +33,14 @@ from custom_components.smart_heating_scheduler.sensor import async_setup_entry a
 
 
 class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_frost_input_bound_aligns_with_hardware_step_grid(self):
+        await self.configure_builtin()
+        self.hass.states.async_set("climate.test_zone", "off", {**self.attrs, "min_temp": 5.1})
+        limits = self.runtime._frost_limits(self.runtime.zones["zone_a"])
+        self.assertEqual(limits.minimum, 5.5)
+        self.assertEqual(limits.validate(12), 12)
+        self.assertEqual(self.calls, [])
+
     async def test_lower_frost_range_preserves_normal_limits_and_revalidates_device(self):
         await self.configure_builtin()
         self.simulated_receiver()
@@ -954,6 +962,7 @@ class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
     async def asyncTearDown(self):
         self.runtime.close()
+        await self.hass.async_block_till_done(wait_background_tasks=True)
         await self.hass.async_stop(force=True)
         self.temp.cleanup()
 

@@ -1,6 +1,7 @@
 """Read-only HA calendar/Workday adapters and optional feature orchestration."""
 
 import asyncio
+import math
 from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime, time, timedelta
@@ -26,11 +27,12 @@ class InsightControls:
             return None
         attrs = entity.attributes
         try:
-            return Limits(
-                attrs["min_temp"],
-                min(attrs["max_temp"], zone.limits.maximum),
-                attrs.get("target_temp_step"),
-            )
+            low, high = attrs["min_temp"], min(attrs["max_temp"], zone.limits.maximum)
+            step = attrs.get("target_temp_step") or zone.limits.step
+            if step:
+                low = math.ceil(low / step - 1e-8) * step
+                high = math.floor(high / step + 1e-8) * step
+            return Limits(low, high, step)
         except (ValidationError, KeyError, TypeError):
             return None
 
