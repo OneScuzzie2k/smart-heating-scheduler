@@ -2,7 +2,7 @@
 
 New installations start in **observe only**. Boost, holiday and presence actions update durable proposals; no climate/script/helper commands are sent in that mode. The card always identifies sample data, observe-only or heating-control mode.
 
-Heating-control mode is global to the scheduler, includes newly enabled zones, persists across restarts, and requires the administrator to type `ENABLE HEATING CONTROL`. This is an explicit takeover action, not part of initial setup. Test it only against simulated climates until a separate installation/hardware handover is approved. Disable competing schedule writers before takeover. Returning to observe-only is blocked until built-in boosts have been stopped. Unloading HA/integration stops command processing; hardware keeps its last command until independently changed or the controller resumes.
+Heating-control mode is global to the scheduler, includes newly enabled zones, persists across restarts, and requires the administrator to type `ENABLE HEATING CONTROL`. This is an explicit takeover action, not part of initial setup. Start with simulated climates or observe-only comparison; use the [installation handover](INSTALLATION.md#6-hand-over-heating-control) before a supervised live test. Disable competing schedule writers before takeover. Returning to observe-only is blocked until built-in boosts have been stopped. Unloading HA/integration stops command processing; hardware keeps its last command until independently changed or the controller resumes.
 
 ## Per-zone rules
 

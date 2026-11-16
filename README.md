@@ -1,6 +1,16 @@
-# Smart Heating Scheduler - Phase 3 development candidate
+# Smart Heating Scheduler
 
-A reusable Home Assistant integration with a separate companion Lovelace card. New installations start in **observe only**. This build now includes an optional climate writer, so it must not be treated as incapable of changing heating: enabling control is a separate, explicit administrator action.
+A Home Assistant custom integration for weekly heating schedules, timed boost, occupancy overrides and holidays, with a separate companion Lovelace card. Configure your own thermostats and occupancy inputs through the UI.
+
+**Early-access pre-release.** Current integration: [0.3.0.dev2](https://github.com/OneScuzzie2k/smart-heating-scheduler/releases/tag/0.3.0.dev2). Companion card: [0.3.0-dev.4](https://github.com/OneScuzzie2k/smart-heating-scheduler-card/releases/tag/0.3.0-dev.4). These are the tested version pair; broader device and restart/expiry acceptance is ongoing.
+
+**[Installation and setup guide](docs/INSTALLATION.md)** - install both packages, add zones, configure the card and move from observe-only to heating control.
+
+Requires **Home Assistant Core 2026.11.1 or newer** and an existing available, single-target `climate` entity supporting heating. On this supported HA version, use **Settings > Marketplace**. The repositories use the HACS-compatible format; older HA/HACS installations are outside the current supported baseline. The integration is shown in HA as **Smart Heating Scheduler (Preview)**.
+
+No separate add-on, third-party scheduler card, Node.js or user-installed Python package is needed to run it. Your thermostat/device integration remains required. Existing boost scripts/helpers are optional: choose built-in boost if you do not use them.
+
+New installations start in **observe only**. Heating control is a separate administrator action after reviewing every enabled zone.
 
 ## Working features
 
@@ -17,7 +27,7 @@ Read [control policies](docs/CONTROL_POLICIES.md) for priority, configuration, a
 
 ## Testing
 
-Use the disconnected browser preview first. For backend testing, use an isolated HA instance with simulated entities. No production installation or control takeover has been performed. The initial target is HA Core 2026.11.x; local API tests use real HA 2026.11.1 objects and simulated states, without starting an HA server or connecting to live heating.
+For backend development, use an isolated HA instance with simulated entities. API tests use real HA 2026.11.1 objects and simulated states. A supervised two-zone installation has also exercised schedule transitions, manual targets, boost start/cancel and occupancy activation; this does not establish compatibility with every thermostat. Automatic boost expiry, holiday and restart recovery still need broader field acceptance.
 
 ```powershell
 $env:PYTEST_DISABLE_PLUGIN_AUTOLOAD='1'
@@ -27,20 +37,19 @@ python -m unittest tests.ha.test_runtime -v
 
 The HA test command requires Python >=3.14.2 with homeassistant==2026.11.1; standalone logic tests also run on Python 3.13. Restricted Windows environments may need permission for asyncio's internal loopback socket. See VALIDATION.txt for the actual checks and outstanding work.
 
-## Install through HACS / Marketplace
+## Install through Marketplace
 
-Development preview: start in observe-only mode and keep your existing heating schedule in charge. Hardware acceptance is still pending.
+1. Open **Settings > Marketplace > Add from link** and add this repository as an **Integration**:
+   `https://github.com/OneScuzzie2k/smart-heating-scheduler`.
+2. Enable **Include pre-releases**, select **0.3.0.dev2**, and install. Follow any restart prompt.
+3. Add the [companion card repository](https://github.com/OneScuzzie2k/smart-heating-scheduler-card) the same way as a **Dashboard** item; select **0.3.0-dev.4** and reload your browser after installation.
+4. Open **Settings > Devices & services > Add integration**, search for **Smart Heating Scheduler (Preview)** and complete setup. Open its integration entry and choose **Add heating zone** for each thermostat.
+5. Add **Smart Heating Scheduler** from your dashboard's card picker, select the scheduler and build your weekly schedules while still in observe-only mode.
 
-1. In HA 2026.11, open Settings > Marketplace. In older supported HACS interfaces, open HACS.
-2. Add `https://github.com/OneScuzzie2k/smart-heating-scheduler` as a custom **Integration** repository, then download it. Select the default branch for this initial development preview if no release is listed.
-3. Add `https://github.com/OneScuzzie2k/smart-heating-scheduler-card` as a separate **Dashboard** repository and download it.
-4. Follow any restart or browser-reload prompt. Add Smart Heating Scheduler under Devices & services, then add zones and review units, limits and baseline.
-5. Add the companion card through the dashboard editor and select the scheduler entry. Confirm **Observe only**, then compare its proposals with the existing schedule. Do not enable Heating control during this initial test.
-
-The card is a separate repository because HACS/Marketplace installs one item of one type per repository. See [the companion card](https://github.com/OneScuzzie2k/smart-heating-scheduler-card) and the [repository structure reference](https://contributors.home-assistant.io/marketplace/reference/repository-structure/).
+**[Continue with the full setup and handover instructions](docs/INSTALLATION.md)**, including manual installation, the mini card, boost adapters, occupancy, updates and rollback. Installing the files alone does not enable heating control.
 
 ![Scheduler icon](custom_components/smart_heating_scheduler/brand/icon.png)
 
 ## Distribution status
 
-Development version 0.3.0.dev2. Public GitHub development source prepared for HACS/Marketplace custom-repository installation. This is not a catalog-listed release or a live deployment. Full HA bootstrap/platform/config-flow testing, Linux and hardware acceptance, inheritance/bulk configuration, import/export, accessibility, translations and broader release validation remain before a stable release. MIT licensed. Public packages exclude home-specific audit and handover files.
+Published public GitHub pre-releases, available as custom Marketplace repositories. Catalog inclusion and a stable release are pending. Full bootstrap/config-flow coverage, more heating hardware, automatic expiry/restart field acceptance, inheritance/bulk configuration, import/export, accessibility and translations remain release work. MIT licensed. Public packages exclude home-specific audit and handover files.
