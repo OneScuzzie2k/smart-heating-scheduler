@@ -1,4 +1,4 @@
-# 0.5.1 — separate frost minimum (prepared, not yet released)
+# 0.5.1 — separate frost minimum
 
 - Allow frost below the normal schedule/manual minimum without changing normal target limits.
 - Validate frost and recovery targets against the available thermostat’s actual range and current increment, including on save/import and before control.

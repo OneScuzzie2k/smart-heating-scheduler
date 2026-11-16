@@ -1,6 +1,6 @@
-# Guided setup, frost protection and backups — 0.5.0
+# Guided setup, frost protection and backups — 0.5.1
 
-Install integration **0.5.0** and card **0.5.0** together. Existing zones keep their schedules, control settings and learned warm-up model. Frost starts disabled on existing zones.
+Install integration **0.5.1** and card **0.5.1** together. Existing zones keep their schedules, control settings and learned warm-up model. Frost starts disabled on existing zones.
 
 ## Guided zone setup
 
@@ -39,3 +39,7 @@ Settings restoration writes the optional-feature store and main schedule/policy 
 Settings shows learning progress toward at least **12 accepted warming observations and 60 minutes of observed heating**, the measured rate, estimated upcoming warm-up duration and planned start when available. Progress is a minimum data threshold, not an accuracy score. Stale learning still expires after 14 days without useful readings.
 
 For a completed preheat, a usable reading within ten minutes of its scheduled boundary records the target and measured room temperature. The last result indicates whether the room was within 0.3 displayed temperature units of target. This is a near-boundary measurement, not continuous proof of exact on-time arrival. Interrupted or unobserved cycles may have no result. Keep checking actual performance across real heating cycles and changing weather.
+
+## If settings will not save
+
+A rejected save keeps your draft and previous saved settings. Version 0.5.1 keeps the reason beside **Save settings**, including through live status updates. Correct the error and retry, or choose **Reload saved** to discard the draft. A successful save clears the unsaved indicator. On 0.5.0, a frost target below the normal minimum is rejected and status updates can hide the error; update both packages to 0.5.1.

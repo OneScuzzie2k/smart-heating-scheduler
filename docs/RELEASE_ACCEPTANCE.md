@@ -1,3 +1,14 @@
+# Release acceptance — 0.5.1
+
+- 98 standalone logic/storage tests, 39 real Home Assistant runtime tests with simulated devices, and 44 frontend/model/DOM tests pass.
+- Regression checks cover 12°C frost with an unchanged 16°C normal minimum, current hardware limits/increments, capability-change recovery, and a failed settings save remaining visible across live updates and clearing after success.
+- Existing schedules, control mode, frost permission and targets are preserved. Frost targets and temporary recovery targets still require available, compatible hardware and the reviewed maximum.
+- GitHub backend/card/HACS/hassfest checks must pass on the final release commits. See [frost and save guidance](SETUP_FROST_BACKUPS.md).
+
+The lower frost and recovery control scenarios use simulated devices; no live sensor readings are falsified. Previous live 0.5.0 installation recovered both scheduled 20°C targets and mini controls after restart. Live 0.5.1 verification follows installation; no new frost activation is implied by upgrading.
+
+## Historical 0.5.0 acceptance
+
 # Release acceptance — 0.5.0
 
 ## New feature validation
