@@ -1,10 +1,10 @@
 # Calendar profiles, history and measured preheating
 
-Test release **0.4.0.dev1**, paired with card **0.4.0-dev.1**.
-Not a stable release and not installed by preparing this candidate. Existing
-weekly schedules, boost, occupancy and holiday settings remain authoritative.
+Stable integration **0.4.0**, paired with companion card **0.4.0**.
+Existing weekly schedules, boost, occupancy and holiday settings are retained.
 All new profile and preheating controls start disabled/unmapped. History starts
-collecting when this version is actually loaded, not when its files are downloaded.
+collecting when the updated integration is loaded. Preheating is optional: its
+algorithm is tested, while timing accuracy over real cycles remains field work.
 
 ## Where to find them
 
@@ -12,7 +12,7 @@ collecting when this version is actually loaded, not when its files are download
 |---|---|---|
 | Day profiles | Schedules → Calendar & workdays | No extra form |
 | Applied profile | Dashboard, beside today's schedule | Existing target remains the only temperature control |
-| Temperature and decision history | History → selected zone, 24 hours / 7 days | Open full scheduler from its title |
+| Temperature and decision history | History → selected zone, 1 hour / 24 hours / 7 days | Open full scheduler from its title |
 | Learning and preheating | Settings → Smart preheating; dashboard status | No additional sliders or target inputs |
 
 ## Day profiles
@@ -102,7 +102,7 @@ Review several real heating cycles before relying on its timing.
 
 ## Compatibility and validation limits
 
-The candidate adds a separate versioned `.insights` Store; the existing schedule
+The release adds a separate versioned `.insights` Store; the existing schedule
 Store schema is unchanged. Removing the integration removes both Stores. Back up
 before installation; rolling back to 0.3.x leaves the separate optional Store
 unused and restores the original weekly-only profile behavior. Rollback is an
@@ -111,21 +111,21 @@ intentional behavior change if profiles or early starts have been enabled.
 All feature mutations use the existing administrator-only, per-zone WebSocket
 control endpoint. History read access follows the mapped climate permission.
 The new card tolerates an older backend by explaining that an update is needed.
-The older card cannot configure these features, so use the paired candidate.
+The older card cannot configure these features, so use the paired 0.4.0 release.
 
 Automated simulated HA and logic tests cover precedence, source failures, stale
 edits, limits, retention, learning thresholds, owner guards and restart intent.
-The candidate still needs live multi-cycle learning and third-party calendar/
-Workday acceptance before a stable release. No production deployment is implied.
+Live multi-cycle learning and third-party calendar/Workday coverage remain
+validation limits. A stable package does not establish warm-up timing accuracy
+for every building or thermostat. Keep preheating optional and review its results.
 
 
-## Install this test release
+## Install or update to 0.4.0
 
-Keep a current HA settings backup. In Settings → Marketplace, open each already
-added repository, choose Install another version (or include pre-releases), and
-select backend **0.4.0.dev1** and card **0.4.0-dev.1**. Follow the backend restart
-prompt and refresh the browser/app after the card update. Stable-only users stay
-on backend 0.3.1/card 0.3.0 until a stable successor is published.
+Keep a current HA settings backup. In Settings → Marketplace, install or update
+both packages to **0.4.0**. Including pre-releases is not required. Restart HA for
+the backend update and refresh the browser/app after the card update. When moving
+from a development build, select stable 0.4.0 and exclude pre-releases if desired.
 
 Open Heating Control → Settings. **Add heating zone** opens HA's integration
 page in a new tab: choose Add heating zone, select an existing supported heating

@@ -1,10 +1,10 @@
 {
-  "title": "Smart Heating Scheduler (Preview)",
+  "title": "Smart Heating Scheduler",
   "config": {
     "step": {
       "user": {
         "title": "Create an observe-only scheduler",
-        "description": "Starts in observe-only mode: existing heating controls stay in charge. Add zones, review the proposed schedules and smart modes in the companion card. Heating commands require explicit control-mode activation after a reviewed handover. Use a separate test instance for this development build."
+        "description": "Starts in observe-only mode: existing heating controls stay in charge. Add zones, review the proposed schedules and smart modes in the companion card. Heating commands require explicit control-mode activation after a reviewed handover. Review each zone before enabling heating control."
       }
     },
     "abort": {
@@ -36,8 +36,8 @@
           "title": "Manage heating zone",
           "menu_options": {
             "settings": "Zone settings",
-            "schedule": "Edit seven-day preview schedule",
-            "resume": "Clear preview manual hold"
+            "schedule": "Edit seven-day schedule",
+            "resume": "Clear manual hold"
           }
         },
         "settings": {
@@ -56,14 +56,14 @@
           }
         },
         "schedule": {
-          "title": "Edit preview week",
+          "title": "Edit weekly schedule",
           "description": "Use the companion card for visual editing, or supply exactly mon through sun here. Each day contains ordered periods with start (HH:MM), temperature and optional label, beginning at 00:00. Ends follow the next start; the last extends to 24:00. Saving re-evaluates heating if control mode is enabled. Close without submitting to cancel.",
           "data": {
             "week_json": "Seven-day schedule JSON"
           }
         },
         "resume": {
-          "title": "Clear preview manual hold?",
+          "title": "Clear manual hold?",
           "description": "This clears only the scheduler's stored manual hold. It will not switch on heating or cancel an external boost. A physically off thermostat stays off."
         }
       },

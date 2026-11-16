@@ -1,5 +1,16 @@
 # 0.3.1 - boost migration and reload cleanup
 
+## 0.4.0 — stable
+
+- Promote the tested 0.4 backend and compact card feature set to stable releases.
+- Calendar/Workday profiles, local temperature/decision history and optional measured preheating.
+- Compact history charts, preserved profile drafts, simpler Settings and Add heating zone shortcut.
+- Remove development wording from new integration setup and user-facing names.
+- Preserve existing schedules, storage schemas, control intent and legacy service IDs.
+- Preheat timing accuracy and third-party calendar/hardware coverage remain field-validation limits.
+- Guided configurator and frost protection are planned, not included.
+
+
 ## 0.4.0.dev1 — local candidate
 
 - Optional per-zone named day profiles with ordered calendar and Workday rules.

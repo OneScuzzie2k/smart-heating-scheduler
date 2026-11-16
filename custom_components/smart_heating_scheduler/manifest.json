@@ -1,6 +1,6 @@
 {
   "domain": "smart_heating_scheduler",
-  "name": "Smart Heating Scheduler (Preview)",
+  "name": "Smart Heating Scheduler",
   "categories": [
     "climate.thermostats_heating"
   ],
@@ -17,5 +17,5 @@
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/OneScuzzie2k/smart-heating-scheduler/issues",
   "requirements": [],
-  "version": "0.4.0.dev1"
+  "version": "0.4.0"
 }

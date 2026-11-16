@@ -1,3 +1,15 @@
+Stable0.4.0 release -16 November2026
+------------------------------------
+Promotes backend0.4.0.dev1/card0.4.0-dev.3 with release metadata, setup naming,
+user-facing copy and documentation updates. Heating policy/storage unchanged.
+76 logic/storage tests +33 real-HA simulated tests +38 card tests passed on the
+promoted feature set. Local stable-source checks passed; publication also requires green exact-commit CI.
+Live installation/restart, boost expiry, manual/resume,16:30 schedule transition,
+profiles and actual history passed. One zone's learner enabled by owner; actual
+multi-cycle preheat timing is still unverified. Calendar/Workday live mappings
+not activated; simulated acceptance only. See docs/RELEASE_ACCEPTANCE.md.
+Guided setup and frost protection not included. Historical records follow.
+
 Local candidate 0.4.0.dev1 - 16 November 2026
 ---------------------------------------------
 76 standalone logic/storage tests passed (HA module skipped and run separately).

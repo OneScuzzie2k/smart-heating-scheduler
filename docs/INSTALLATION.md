@@ -1,6 +1,6 @@
 # Installation and setup
 
-This guide covers stable integration **0.3.1** with companion card **0.3.0**. Start with observe-only comparison before a supervised heating-control test. See [release acceptance](RELEASE_ACCEPTANCE.md) for the tested setup and limits.
+This guide covers stable integration **0.4.0** with companion card **0.4.0**. Start with observe-only comparison before a supervised heating-control test. See [release acceptance](RELEASE_ACCEPTANCE.md) for the tested setup and limits.
 
 ## Requirements
 
@@ -20,8 +20,8 @@ Choose **Add from link**, enter each GitHub repository URL and confirm the repos
 
 | Package | GitHub repository | Type | Version |
 | --- | --- | --- | --- |
-| Backend | https://github.com/OneScuzzie2k/smart-heating-scheduler | Integration | `0.3.1` |
-| Companion card | https://github.com/OneScuzzie2k/smart-heating-scheduler-card | Dashboard | `0.3.0` |
+| Backend | https://github.com/OneScuzzie2k/smart-heating-scheduler | Integration | `0.4.0` |
+| Companion card | https://github.com/OneScuzzie2k/smart-heating-scheduler-card | Dashboard | `0.4.0` |
 
 Select the stable versions above; **Include pre-releases** is not required. If necessary, use **Install another version** to choose the tag. Prefer tagged versions for reproducible installations. A short commit hash in the installed-version display means a default-branch build; record it when reporting an issue. Enable Include pre-releases only if deliberately testing a development release.
 
@@ -32,7 +32,7 @@ These projects are custom repositories and are not yet catalog-listed. See the o
 ## 2. Create the scheduler and zones
 
 1. Open **Settings > Devices & services > Add integration**.
-2. Search for **Smart Heating Scheduler (Preview)**. Complete the initial observe-only setup. The entry is currently named **Heating Scheduler Preview**; this name does not determine whether heating control is enabled.
+2. Search for **Smart Heating Scheduler**. Complete the initial observe-only setup. New entries are named **Heating Scheduler**; existing entries can retain their previous name. The name does not determine control mode.
 3. Open that integration entry and choose **Add heating zone**. Only one scheduler instance is supported; add each thermostat as a zone inside it.
 4. Set a zone name, select its thermostat, and review its minimum/maximum target and initial all-day target. Values use the thermostat's Celsius or Fahrenheit unit and must fit its range/increment.
 5. Choose how manual target changes should resume: next period, a duration, or explicit resume. If using duration, set the hold minutes.
@@ -133,8 +133,8 @@ The built release bundle is ready to use. End users do not need to build the car
 
 | Symptom | Check |
 | --- | --- |
-| No release offered | Core is at least 2026.11.1; both repositories added; GitHub connected; refresh repository information; choose integration 0.3.1 and card 0.3.0. Include pre-releases is only needed for development versions. |
-| Integration not in Add integration | Backend files installed in the correct folder; follow restart prompt; search for Smart Heating Scheduler (Preview); inspect HA logs. |
+| No release offered | Core is at least 2026.11.1; both repositories added; GitHub connected; refresh repository information; choose integration 0.4.0 and card 0.4.0. Include pre-releases is only needed for development versions. |
+| Integration not in Add integration | Backend files installed in the correct folder; follow restart prompt; search for Smart Heating Scheduler; inspect HA logs. |
 | Card type not found | Card repository installed; resource registered as a module once; reload the browser/app frontend. |
 | No scheduler or zones | Finish backend setup, choose Scheduler in the visual editor, add a zone, and confirm the user's entity permissions. |
 | Zone setup rejected | Thermostat available; supports heat and a single target; reviewed limits/increment fit the device; thermostat not already mapped. |
@@ -144,3 +144,13 @@ The built release bundle is ready to use. End users do not need to build the car
 | Wrong mini-card zone | Select the exact Heating zone in the editor; a zone subentry ID is different from a climate entity ID. |
 
 For an issue, include HA version, integration/card versions (or installed commit hashes), thermostat integration/model, expected/actual behaviour and a redacted relevant log excerpt. Remove tokens, location coordinates and private home details.
+
+
+## Profiles, history and preheating in 0.4.0
+
+Use Schedules → Calendar & workdays for optional named day profiles and rules.
+History has compact 1-hour, 24-hour and 7-day views and local retention controls.
+Settings → Smart preheating enables measured learning/early starts per zone; it
+starts disabled and requires enough valid heating observations. Read the
+[feature guide](PROFILES_HISTORY_PREHEATING.md) before relying on warm-up timing.
+Guided setup and frost protection are not included in this release.

@@ -25,7 +25,7 @@ update_schedule:
       selector:
         object:
 resume_preview:
-  name: Clear preview manual hold
+  name: Clear manual hold
   description: Clear this integration's manual hold. A physically off thermostat stays off and an external boost stays owned by its adapter. Re-evaluates targets if heating control is enabled.
   fields:
     entry_id:
