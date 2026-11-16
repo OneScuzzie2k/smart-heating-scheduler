@@ -24,6 +24,7 @@ from homeassistant.helpers.service import async_register_admin_service
 from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
+from . import insights, smart
 from .const import DOMAIN, STORAGE_VERSION
 from .controller import PreviewController, Zone
 from .controls import Controls
@@ -93,9 +94,24 @@ class Runtime(Controls):
                 self.zones[zone.id] = zone
                 self.mappings[zone.id] = (entity_id, data.get("boost_timer", ""), data["unit"])
                 await self.repository.initialise(
-                    zone.id, Week.baseline(data["baseline_temperature"], limits)
+                    zone.id,
+                    Week.parse(data["initial_week"], limits)
+                    if data.get("initial_week")
+                    else Week.baseline(data["baseline_temperature"], limits),
                 )
                 self.repository.read(zone.id, limits)
+                if zone.id not in self.repository.snapshot()["smart"] and data.get(
+                    "initial_policy"
+                ):
+                    initial = smart.defaults()
+                    initial["policy"] = data["initial_policy"]
+                    await self.repository.smart_save(zone.id, initial, limits)
+                if zone.id not in self.insights.data["zones"] and data.get("initial_features"):
+                    initial = insights.empty_record()
+                    initial["settings"] = insights.validate_settings(
+                        data["initial_features"], limits
+                    )
+                    await self.insights.save(zone.id, initial)
                 self.smart_record(zone.id)
                 self.insights.read(zone.id, limits)
             await self.async_evaluate()

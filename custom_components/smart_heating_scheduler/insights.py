@@ -10,12 +10,14 @@ from copy import deepcopy
 from dataclasses import replace
 from datetime import UTC, datetime, time, timedelta
 
+from . import frost
 from .const import DAYS
 from .engine import ValidationError, Week, number, timestamp, utc
 
 
 def defaults():
     return {
+        **frost.defaults(),
         "profiles": {},
         "workday_entity": "",
         "workday_profile": "",
@@ -32,6 +34,7 @@ def validate_settings(raw, limits):
     if not isinstance(raw, dict) or set(raw) != set(defaults()):
         raise ValidationError("Invalid profile/preheating settings")
     result = deepcopy(raw)
+    frost.validate(raw, limits)
     if not isinstance(raw["profiles"], dict) or len(raw["profiles"]) > 12:
         raise ValidationError("Use at most 12 named day profiles")
     for name, periods in raw["profiles"].items():
@@ -118,6 +121,8 @@ def empty_record():
         "decisions": [],
         "model": {"rate": None, "minutes": 0, "samples": 0},
         "preheat": None,
+        "frost_cycle": None,
+        "warmup_result": None,
     }
 
 
@@ -141,7 +146,11 @@ class InsightsRepository:
 
     def read(self, zid, limits):
         record = deepcopy(self.data["zones"].get(zid, empty_record()))
+        record["settings"] = {**frost.defaults(), **record["settings"]}
+        record.setdefault("frost_cycle", None)
+        record.setdefault("warmup_result", None)
         validate_settings(record["settings"], limits)
+        frost.validate_cycle(record["frost_cycle"], limits)
         if type(record["revision"]) is not int or record["revision"] < 1:
             raise ValidationError("Invalid insights revision")
         if len(record["samples"]) > 2016 or len(record["decisions"]) > 500:
@@ -246,6 +255,13 @@ def preheat(decision, record, week, now, timezone, room, *, allowed=True):
         "rate": model["rate"],
         "samples": model["samples"],
         "minutes": model["minutes"],
+        "required_samples": 12,
+        "required_minutes": 60,
+        "learning_percent": min(
+            100, round(min(model["samples"] / 12, model["minutes"] / 60) * 100)
+        ),
+        "last_result": record.get("warmup_result"),
+        "estimated_minutes": None,
     }
     if not settings["preheat_enabled"]:
         record["preheat"] = None
@@ -275,6 +291,14 @@ def preheat(decision, record, week, now, timezone, room, *, allowed=True):
                 reason=f"Preheating for {until.astimezone(timezone):%H:%M}; measured warm-up rate",
                 next_evaluation=min(decision.next_evaluation, until),
             ), info
+        if until <= utc(now) and utc(now) - until <= timedelta(minutes=10):
+            record["warmup_result"] = {
+                "at": until.isoformat(),
+                "target": active["target"],
+                "room": room,
+                "on_time": room >= active["target"] - 0.3,
+            }
+            info["last_result"] = record["warmup_result"]
         record["preheat"] = None
     if (
         model["samples"] < 12
@@ -299,7 +323,11 @@ def preheat(decision, record, week, now, timezone, room, *, allowed=True):
                 (target - room) / model["rate"] * 60 + settings["preheat_margin_minutes"],
             )
             start = boundary - timedelta(minutes=minutes)
-            info.update(ready_at=boundary.isoformat(), starts_at=start.isoformat())
+            info.update(
+                ready_at=boundary.isoformat(),
+                starts_at=start.isoformat(),
+                estimated_minutes=round(minutes),
+            )
             if start <= utc(now):
                 info["state"] = "preheating"
                 record["preheat"] = {

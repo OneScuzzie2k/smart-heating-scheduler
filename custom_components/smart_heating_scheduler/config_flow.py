@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 
 import probatio as vol
 from homeassistant.components.climate.const import ClimateEntityFeature, HVACMode
@@ -11,8 +12,9 @@ from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 
+from . import insights, smart
 from .const import DOMAIN
-from .engine import Limits, ValidationError, number
+from .engine import Limits, ValidationError, Week, number
 
 
 def validate_zone(hass, data, existing, exclude=None):
@@ -116,7 +118,191 @@ class SchedulerConfigFlow(ConfigFlow, domain=DOMAIN):
 
 class ZoneSubentryFlow(ConfigSubentryFlow):
     async def async_step_user(self, user_input=None):
-        return await self._zone_form("user", user_input)
+        return self.async_show_menu(step_id="user", menu_options=["guided", "advanced"])
+
+    async def async_step_advanced(self, user_input=None):
+        return await self._zone_form("advanced", user_input)
+
+    async def async_step_guided(self, user_input=None):
+        errors = {}
+        if user_input is not None:
+            try:
+                eid = user_input["climate_entity"]
+                state = self.hass.states.get(eid)
+                attrs = state.attributes if state else {}
+                low, high = number(attrs.get("min_temp")), number(attrs.get("max_temp"))
+                step = attrs.get("target_temp_step")
+                if type(step) in (int, float) and step > 0:
+                    low = math.ceil(low / step - 1e-8) * step
+                    high = math.floor(high / step + 1e-8) * step
+                baseline = attrs.get("temperature")
+                if type(baseline) not in (int, float):
+                    baseline = low
+                baseline = max(low, min(high, baseline))
+                if type(step) in (int, float) and step > 0:
+                    baseline = round(baseline / step) * step
+                candidate = {
+                    "name": user_input["name"].strip(),
+                    "climate_entity": eid,
+                    "minimum": low,
+                    "maximum": high,
+                    "baseline_temperature": baseline,
+                    "enabled": False,
+                    "manual_policy": "next_period",
+                    "manual_minutes": 120,
+                    "boost_timer": "",
+                }
+                if not candidate["name"] or len(candidate["name"]) > 80:
+                    raise ValidationError("Choose a zone name")
+                self._guided = validate_zone(self.hass, candidate, self._get_entry().subentries)
+                return await self.async_step_limits()
+            except (ValidationError, TypeError, ValueError):
+                errors["base"] = "invalid_zone"
+        return self.async_show_form(
+            step_id="guided",
+            errors=errors,
+            data_schema=vol.Schema(
+                {
+                    vol.Required("name"): str,
+                    vol.Required("climate_entity"): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="climate")
+                    ),
+                }
+            ),
+        )
+
+    async def async_step_limits(self, user_input=None):
+        errors = {}
+        d = self._guided
+        if user_input is not None:
+            if user_input.get("back"):
+                return await self.async_step_guided()
+            try:
+                candidate = {
+                    **d,
+                    **{k: user_input[k] for k in ("minimum", "maximum", "baseline_temperature")},
+                }
+                self._guided = validate_zone(self.hass, candidate, self._get_entry().subentries)
+                return await self.async_step_options()
+            except (ValidationError, TypeError, ValueError):
+                errors["base"] = "invalid_zone"
+        return self.async_show_form(
+            step_id="limits",
+            errors=errors,
+            description_placeholders={"unit": d["unit"]},
+            data_schema=vol.Schema(
+                {
+                    **{
+                        vol.Required(k, default=d[k]): vol.Coerce(float)
+                        for k in ("minimum", "maximum", "baseline_temperature")
+                    },
+                    vol.Optional("back", default=False): bool,
+                }
+            ),
+        )
+
+    async def async_step_options(self, user_input=None):
+        errors = {}
+        if user_input is not None:
+            self._guided_options = {k: v for k, v in user_input.items() if k != "back"}
+            if user_input.get("back"):
+                return await self.async_step_limits()
+            try:
+                d = self._guided
+                limits = Limits(d["minimum"], d["maximum"], d["step"])
+                features = insights.defaults()
+                features.update(
+                    {
+                        k: user_input[k]
+                        for k in ("preheat_enabled", "frost_enabled", "frost_while_off")
+                    }
+                )
+                features["frost_target"] = (
+                    user_input["frost_target"] if features["frost_enabled"] else None
+                )
+                d["initial_features"] = insights.validate_settings(features, limits)
+                policy = smart.defaults()["policy"]
+                policy["boost_owner"] = "builtin" if user_input["boost_enabled"] else "none"
+                policy["boost_target"] = (
+                    limits.validate(user_input["boost_target"])
+                    if user_input["boost_enabled"]
+                    else None
+                )
+                eid = user_input.get("person", "")
+                if eid:
+                    if not eid.startswith("person.") or self.hass.states.get(eid) is None:
+                        raise ValidationError("Choose an existing person")
+                    policy["entities"] = [
+                        {"entity_id": eid, "home_state": "home", "away_state": "not_home"}
+                    ]
+                    policy["comfort_target"] = limits.validate(user_input["occupied_target"])
+                checked = smart.defaults()
+                checked["policy"] = policy
+                smart.validate(checked, limits)
+                d["initial_policy"] = policy
+                d["initial_week"] = Week.baseline(d["baseline_temperature"], limits).to_dict()
+                return await self.async_step_review()
+            except (ValidationError, ValueError, TypeError, KeyError):
+                errors["base"] = "invalid_zone"
+        d = self._guided
+        result = self.async_show_form(
+            step_id="options",
+            errors=errors,
+            data_schema=vol.Schema(
+                {
+                    vol.Required("boost_enabled", default=True): bool,
+                    vol.Required("boost_target", default=d["baseline_temperature"]): vol.Coerce(
+                        float
+                    ),
+                    vol.Optional("person", default=""): str,
+                    vol.Required("occupied_target", default=d["baseline_temperature"]): vol.Coerce(
+                        float
+                    ),
+                    vol.Required("preheat_enabled", default=False): bool,
+                    vol.Required("frost_enabled", default=False): bool,
+                    vol.Required("frost_target", default=d["minimum"]): vol.Coerce(float),
+                    vol.Required("frost_while_off", default=False): bool,
+                    vol.Optional("back", default=False): bool,
+                }
+            ),
+        )
+
+        result["data_schema"] = self.add_suggested_values_to_schema(
+            result["data_schema"], getattr(self, "_guided_options", {})
+        )
+        return result
+
+    async def async_step_review(self, user_input=None):
+        d = self._guided
+        if user_input is not None:
+            if user_input.get("back"):
+                return await self.async_step_options()
+            # Re-check capabilities and duplicates at the final action.
+            try:
+                d = validate_zone(self.hass, d, self._get_entry().subentries)
+            except (ValidationError, ValueError, TypeError):
+                return await self.async_step_guided()
+            return self.async_create_entry(
+                title=d["name"], data=d, unique_id=d["climate_registry_id"] or d["climate_entity"]
+            )
+        p, f = d["initial_policy"], d["initial_features"]
+        occupancy = (
+            "Mon–Fri 08:30–16:30 minimum " + str(p["comfort_target"]) if p["entities"] else "off"
+        )
+        summary = (
+            f"{d['name']} → {d['climate_entity']}; "
+            f"{d['minimum']}–{d['maximum']} {d['unit']}; "
+            f"all seven days {d['baseline_temperature']} {d['unit']}. "
+            f"Boost: {p['boost_owner']}; occupancy: {occupancy}; "
+            f"preheating: {f['preheat_enabled']}; "
+            f"frost: {f['frost_target'] if f['frost_enabled'] else 'off'}, "
+            f"while Off: {f['frost_while_off']}."
+        )
+        return self.async_show_form(
+            step_id="review",
+            description_placeholders={"summary": summary},
+            data_schema=vol.Schema({vol.Optional("back", default=False): bool}),
+        )
 
     async def async_step_reconfigure(self, user_input=None):
         return self.async_show_menu(

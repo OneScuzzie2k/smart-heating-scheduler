@@ -227,3 +227,36 @@ class InsightsPersistenceTests(unittest.IsolatedAsyncioTestCase):
         restored = insights.InsightsRepository(store)
         await restored.load()
         self.assertFalse(restored.read("zone", LIMITS)["settings"]["preheat_enabled"])
+
+
+def test_preheat_feedback_records_measured_boundary_result_and_progress():
+    record = trained()
+    early, info = insights.preheat(decision(), record, week(), NOW, TZ, 18)
+    assert info["learning_percent"] == 100
+    assert early.source == "preheat" and info["estimated_minutes"] is not None
+    boundary = NOW + timedelta(minutes=30)
+    current = replace(
+        decision(), target=20, schedule_target=20, next_evaluation=boundary + timedelta(hours=2)
+    )
+    _, result = insights.preheat(current, record, week(), boundary, TZ, 19.5)
+    assert result["last_result"]["on_time"] is False
+    assert result["last_result"]["room"] == 19.5
+
+
+def test_old_insights_settings_gain_disabled_frost_without_resetting_learning():
+    class Store:
+        async def async_load(self):
+            return None
+
+    repo = insights.InsightsRepository(Store())
+    record = trained()
+    for key in list(record["settings"]):
+        if key.startswith("frost_"):
+            del record["settings"][key]
+    del record["frost_cycle"]
+    del record["warmup_result"]
+    repo.data["zones"]["old"] = record
+    loaded = repo.read("old", LIMITS)
+    assert loaded["settings"]["frost_enabled"] is False
+    assert loaded["settings"]["preheat_enabled"] is True
+    assert loaded["model"]["samples"] == 12

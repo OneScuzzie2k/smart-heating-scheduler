@@ -7,8 +7,8 @@ from datetime import UTC, datetime, time, timedelta
 
 from homeassistant.exceptions import HomeAssistantError
 
-from . import insights
-from .engine import ValidationError, Week
+from . import frost, insights
+from .engine import Hold, ValidationError, Week
 
 
 def event_time(value, timezone):
@@ -174,6 +174,23 @@ class InsightControls:
             attrs.get("current_temperature"),
             allowed=allowed,
         )
+        previous_cycle = deepcopy(record.get("frost_cycle"))
+        decision, frost_status = frost.resolve(
+            decision,
+            record,
+            self._observation(zone.id),
+            attrs.get("current_temperature"),
+            entity.last_updated if entity else None,
+            now,
+            control_enabled=self.repository.control_enabled,
+            step=zone.limits.step,
+            settling=bool(
+                self._command_state.get(zone.id) and self._command_state[zone.id][2] > now
+            ),
+        )
+        if record.get("frost_cycle") and not previous_cycle:
+            # Preserve the original physical Off state through a restart.
+            await self.repository.save_hold(zone.id, Hold("off", None, None), zone.limits)
         # History records every final owner, including manual/boost/holiday.
         if record["settings"]["history_enabled"] or record["settings"]["preheat_enabled"]:
             insights.observe(
@@ -199,21 +216,36 @@ class InsightControls:
                 self._insight_storage_failed.add(zone.id)
                 record = original
                 warnings.append("History could not be saved; preheating paused")
-        if storage_error and decision.source == "preheat":
+        if storage_error and decision.source in {"preheat", "frost", "frost_return_off"}:
             # A failed optional-history write cannot result in untracked early heat.
             decision = replace(
                 decision,
-                target=decision.schedule_target,
-                source="schedule",
-                reason="Following schedule; preheating storage unavailable",
+                target=None,
+                source="error",
+                inhibited=True,
+                reason="Optional control state could not be saved; commands paused",
             )
+            if decision.source == "error" and frost_status["state"] not in {
+                "active",
+                "proposed",
+                "returning_off",
+            }:
+                decision = replace(
+                    decision,
+                    target=decision.schedule_target,
+                    source="schedule",
+                    inhibited=False,
+                    reason="Following schedule; preheating storage unavailable",
+                )
             preheat["state"] = "paused"
+            frost_status["state"] = "unavailable"
         self.insight_status[zone.id] = {
             "days": selected,
             "active_profile": selected[0]["profile"],
             "effective_week": week.to_dict(),
             "warnings": warnings,
             "preheat": preheat,
+            "frost": frost_status,
             "samples": record["samples"] if record["settings"]["history_enabled"] else [],
             "decisions": record["decisions"] if record["settings"]["history_enabled"] else [],
         }
@@ -253,3 +285,82 @@ class InsightControls:
         record["revision"] += 1
         await self.insights.save(zone.id, record)
         self._invalidate_insights()
+
+    async def _restore_configuration(self, zone, payload):
+        """Import reviewed configuration only while this destination is disabled."""
+        from . import smart
+
+        if zone.enabled or payload.get("acknowledgement") != "RESTORE ZONE SETTINGS":
+            raise ValidationError(
+                "Disable this zone and review the import before restoring settings"
+            )
+        old = self.insights.read(zone.id, zone.limits)
+        data = payload["backup"]
+        if not isinstance(data, dict):
+            raise ValidationError("Configuration backup must be an object")
+        if (
+            data.get("format") != "smart-heating-scheduler/zone"
+            or data.get("version") != 1
+            or data.get("unit") != self.mappings[zone.id][2]
+        ):
+            raise ValidationError(
+                "Unsupported configuration backup or incompatible temperature units"
+            )
+        current = self.smart_record(zone.id)
+        observed = self._observation(zone.id)
+        if (
+            current["boost"]
+            or current["external_operation"]
+            or observed.external_boost
+            or observed.boost_unknown
+            or old.get("frost_cycle")
+        ):
+            raise ValidationError("Finish boost/frost ownership before restoring settings")
+        _, _, revision = self.repository.read(zone.id, zone.limits)
+        if any(
+            type(payload.get(k)) is not int
+            for k in ("revision", "features_revision", "policy_revision")
+        ) or (
+            revision != payload["revision"]
+            or old["revision"] != payload["features_revision"]
+            or current["policy_revision"] != payload["policy_revision"]
+        ):
+            raise ValidationError("Zone changed elsewhere; reopen the import preview")
+        Week.parse(data["week"], zone.limits)
+        candidate = deepcopy(old)
+        candidate["settings"] = insights.validate_settings(data["features"], zone.limits)
+        candidate["preheat"] = None
+        candidate["revision"] += 1
+        policy_record = deepcopy(current)
+        policy_record["policy"] = data["policy"]
+        smart.validate(policy_record, zone.limits)
+        self._validate_entities(policy_record)
+        settings = candidate["settings"]
+        for eid in (
+            {settings["workday_entity"]} | {r["entity_id"] for r in settings["calendar_rules"]}
+        ) - {""}:
+            if self.hass.states.get(eid) is None:
+                raise ValidationError(f"Feature entity does not exist: {eid}")
+        keys = ("timer", "start_script", "cancel_script", "duration_helper")
+        for zid in self.zones:
+            if zid != zone.id and (
+                {data["policy"][k] for k in keys}
+                & {self.smart_record(zid)["policy"][k] for k in keys}
+            ) - {""}:
+                raise ValidationError("External boost mappings already belong to another zone")
+        await self.insights.save(zone.id, candidate)
+        try:
+            await self.repository.restore_configuration(
+                zone.id, data["week"], data["policy"], zone.limits, revision
+            )
+        except (OSError, ValidationError):
+            try:
+                await self.insights.save(zone.id, old)
+            except OSError as err:
+                raise ValidationError(
+                    "Partial import: settings rollback failed. "
+                    "Keep the zone disabled and retry the reviewed backup"
+                ) from err
+            raise
+        self._invalidate_insights()
+        self._refresh_completion_listeners()

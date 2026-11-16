@@ -1,3 +1,16 @@
+# Release acceptance — 0.5.0
+
+## New feature validation
+
+- 96 standalone logic/storage tests, including cold/missing/stale/future readings, Celsius/Fahrenheit reviewed limits, Off permission, recovery headroom, disabled/boost guards and persisted frost recovery.
+- 37 real Home Assistant runtime tests with simulated devices, including cold Off → temporary heat → restart → warm room → Off; storage failure inhibits frost writes; guided setup review creates a disabled zone; configuration restore rejects enabled destinations/stale revisions and rolls back a reported storage error.
+- 42 frontend/model/DOM tests, including import previews, incompatible units/targets, stale destinations, explicit disabled-zone restore acknowledgement, learning feedback and mini-card regression controls.
+- Production bundle built; Ruff lint/format and diff checks pass locally. Exact-commit GitHub checks are required before publication.
+
+New frost and restore scenarios use simulated entities. No live room readings were falsified, and frost has not been activated on the supervised home. Multi-cycle preheat accuracy and other thermostat models remain field-validation limits. Settings restore spans two storage files; a crash between writes requires retry while the destination remains disabled. See [feature scope](SETUP_FROST_BACKUPS.md).
+
+## Historical 0.4.0 acceptance
+
 # Release acceptance — 0.4.0, 16 November 2026
 
 The stable pair promotes integration 0.4.0.dev1 and card 0.4.0-dev.3, with

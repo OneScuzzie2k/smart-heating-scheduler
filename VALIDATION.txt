@@ -1,3 +1,13 @@
+0.5.0 candidate -16 November2026
+--------------------------------
+96 standalone tests,37 real-HA simulated runtime tests,42 frontend/model/DOM tests.
+Ruff lint/format, production build and diff checks passed locally.
+Four-step disabled-zone wizard; optional frost with Off recovery intent and report-age guards;
+weekly and zone-configuration backups/import/copy; learner progress/estimate/result feedback.
+Existing live0.4.0 remains unchanged until stable0.5 publication and installation.
+No live frost activation or full-configuration restore claimed. See docs/SETUP_FROST_BACKUPS.md
+and docs/RELEASE_ACCEPTANCE.md for limits and historical acceptance.
+
 Stable0.4.0 release -16 November2026
 ------------------------------------
 Promotes backend0.4.0.dev1/card0.4.0-dev.3 with release metadata, setup naming,

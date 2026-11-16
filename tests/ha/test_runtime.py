@@ -33,6 +33,147 @@ from custom_components.smart_heating_scheduler.sensor import async_setup_entry a
 
 
 class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_frost_storage_failure_never_commands_cold_off_receiver(self):
+        await self.configure_builtin()
+        self.simulated_receiver()
+        self.hass.states.async_set(
+            "climate.test_zone", "off", {**self.attrs, "current_temperature": 17}
+        )
+        await self.runtime.async_evaluate()
+        record = self.runtime.insights.read("zone_a", self.runtime.zones["zone_a"].limits)
+        record["settings"].update(frost_enabled=True, frost_target=18, frost_while_off=True)
+        await self.runtime.insights.save("zone_a", record)
+        with patch.object(self.runtime.insights.store, "async_save", side_effect=OSError("disk")):
+            await self.enable_control()
+        self.assertEqual(self.calls, [])
+        self.assertEqual(self.hass.states.get("climate.test_zone").state, "off")
+        self.assertEqual(self.runtime.status["zone_a"]["source"], "error")
+
+    async def test_configuration_restore_requires_disabled_zone_checks_revision_and_rolls_back(
+        self,
+    ):
+        from copy import deepcopy
+        from dataclasses import replace
+
+        await self.configure_builtin()
+        zone = self.runtime.zones["zone_a"]
+        old = self.runtime.insights.read(zone.id, zone.limits)
+        week, _, revision = self.runtime.repository.read(zone.id, zone.limits)
+        week = week.to_dict()
+        week["mon"][0]["temperature"] = 18
+        features = deepcopy(old["settings"])
+        features.update(frost_enabled=True, frost_target=16)
+        backup = {
+            "format": "smart-heating-scheduler/zone",
+            "version": 1,
+            "unit": "°C",
+            "week": week,
+            "features": features,
+            "policy": self.runtime.smart_record(zone.id)["policy"],
+        }
+        payload = {
+            "backup": backup,
+            "revision": revision,
+            "features_revision": old["revision"],
+            "policy_revision": self.runtime.smart_record(zone.id)["policy_revision"],
+            "acknowledgement": "RESTORE ZONE SETTINGS",
+        }
+        with self.assertRaises(ValidationError):
+            await self.runtime.async_control_action("restore_configuration", zone.id, payload)
+        self.runtime.zones[zone.id] = replace(zone, enabled=False)
+        with patch.object(
+            self.runtime.repository, "restore_configuration", side_effect=OSError("disk")
+        ):
+            with self.assertRaises(OSError):
+                await self.runtime.async_control_action("restore_configuration", zone.id, payload)
+        self.assertEqual(self.runtime.insights.read(zone.id, zone.limits), old)
+        await self.runtime.async_control_action("restore_configuration", zone.id, payload)
+        self.assertEqual(
+            self.runtime.repository.read(zone.id, zone.limits)[0].to_dict()["mon"][0][
+                "temperature"
+            ],
+            18,
+        )
+        self.assertTrue(
+            self.runtime.insights.read(zone.id, zone.limits)["settings"]["frost_enabled"]
+        )
+        with self.assertRaises(ValidationError):
+            await self.runtime.async_control_action("restore_configuration", zone.id, payload)
+        self.assertEqual(self.calls, [])
+
+    async def test_frost_off_cycle_returns_off_and_survives_runtime_restart(self):
+        await self.configure_builtin()
+        self.simulated_receiver()
+        self.hass.states.async_set(
+            "climate.test_zone", "off", {**self.attrs, "current_temperature": 17}
+        )
+        await self.runtime.async_evaluate()
+        settings = self.runtime.insights.read("zone_a", self.runtime.zones["zone_a"].limits)[
+            "settings"
+        ]
+        settings.update(frost_enabled=True, frost_target=18, frost_while_off=True)
+        await self.runtime.async_control_action(
+            "insights", "zone_a", {"revision": 1, "settings": settings}
+        )
+        self.assertEqual(self.calls, [])
+        await self.enable_control()
+        await self.hass.async_block_till_done()
+        self.assertEqual(self.hass.states.get("climate.test_zone").state, "heat")
+        self.assertEqual(self.hass.states.get("climate.test_zone").attributes["temperature"], 19)
+        self.assertEqual(self.runtime.status["zone_a"]["source"], "frost")
+        self.runtime.close()
+        self.runtime = Runtime(self.hass, self.entry)
+        self.entry.runtime_data = self.runtime
+        await self.runtime.async_setup()
+        self.assertEqual(self.runtime.status["zone_a"]["source"], "frost")
+        state = self.hass.states.get("climate.test_zone")
+        self.hass.states.async_set(
+            "climate.test_zone", "heat", {**state.attributes, "current_temperature": 18.5}
+        )
+        await self.runtime.async_evaluate()
+        await self.hass.async_block_till_done()
+        self.assertEqual(self.hass.states.get("climate.test_zone").state, "off")
+        self.assertIsNone(
+            self.runtime.insights.read("zone_a", self.runtime.zones["zone_a"].limits)["frost_cycle"]
+        )
+
+    async def test_guided_setup_reviews_features_and_creates_disabled_zone(self):
+        self.hass.states.async_set("climate.new_zone", "heat", self.attrs)
+        self.hass.states.async_set("person.test", "home")
+        with patch.object(ZoneSubentryFlow, "_get_entry", return_value=self.entry):
+            flow = ZoneSubentryFlow()
+            flow.hass = self.hass
+            flow.context = {"source": "user"}
+            self.assertEqual((await flow.async_step_user())["type"], "menu")
+            result = await flow.async_step_guided(
+                {"name": "New room", "climate_entity": "climate.new_zone"}
+            )
+            self.assertEqual(result["step_id"], "limits")
+            result = await flow.async_step_limits(
+                {"minimum": 5, "maximum": 28, "baseline_temperature": 16}
+            )
+            self.assertEqual(result["step_id"], "options")
+            options = {
+                "boost_enabled": True,
+                "boost_target": 23,
+                "person": "person.test",
+                "occupied_target": 20,
+                "preheat_enabled": True,
+                "frost_enabled": True,
+                "frost_target": 7,
+                "frost_while_off": False,
+            }
+            result = await flow.async_step_options(options)
+            self.assertEqual(result["step_id"], "review")
+            self.assertIn("New room", result["description_placeholders"]["summary"])
+            self.assertEqual(self.calls, [])
+            created = await flow.async_step_review({})
+            self.assertEqual(created["type"], "create_entry")
+            self.assertFalse(created["data"]["enabled"])
+            self.assertEqual(created["data"]["initial_features"]["frost_target"], 7)
+            self.assertEqual(created["data"]["initial_policy"]["comfort_target"], 20)
+            self.assertEqual(len(created["data"]["initial_week"]), 7)
+
     async def test_slow_calendar_refresh_does_not_block_boost_or_flicker_profile(self):
         import asyncio
         from datetime import timedelta
@@ -830,7 +971,7 @@ class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
             invalid = dict(self.entry.subentries["zone_a"].data)
             invalid["climate_entity"] = "climate.not_present"
             self.assertEqual(
-                (await zone_flow.async_step_user(invalid))["errors"]["base"], "invalid_zone"
+                (await zone_flow.async_step_advanced(invalid))["errors"]["base"], "invalid_zone"
             )
         with self.assertRaises(ValidationError):
             validate_zone(self.hass, self.entry.subentries["zone_a"].data, self.entry.subentries)

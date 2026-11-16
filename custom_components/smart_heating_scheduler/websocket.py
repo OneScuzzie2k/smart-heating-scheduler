@@ -248,6 +248,7 @@ async def save_schedule(hass, connection, msg):
                 "insights",
                 "reset_learning",
                 "clear_history",
+                "restore_configuration",
             ]
         ),
         vol.Required("payload"): dict,

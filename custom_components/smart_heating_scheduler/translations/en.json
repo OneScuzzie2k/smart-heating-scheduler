@@ -18,18 +18,10 @@
       },
       "step": {
         "user": {
-          "title": "Add a heating zone",
-          "description": "Choose a single-target heating climate entity. Review limits and an initial baseline in its unit (Celsius or Fahrenheit). The baseline fills all seven days until edited. These are application bounds, not a protection guarantee. If heating control is already enabled for the scheduler, new enabled zones also participate. An optional existing boost timer establishes external ownership; configure its adapter in the card Settings.",
-          "data": {
-            "name": "Zone name",
-            "climate_entity": "Thermostat",
-            "minimum": "Reviewed minimum target",
-            "maximum": "Reviewed maximum target",
-            "baseline_temperature": "Initial all-day target",
-            "enabled": "Enable zone scheduling",
-            "manual_policy": "Resume after an observed manual target change",
-            "manual_minutes": "Hold duration in minutes (duration policy only)",
-            "boost_timer": "Existing boost timer entity ID (optional)"
+          "title": "Add heating zone",
+          "menu_options": {
+            "guided": "Guided setup (recommended)",
+            "advanced": "Advanced zone form"
           }
         },
         "reconfigure": {
@@ -65,6 +57,61 @@
         "resume": {
           "title": "Clear manual hold?",
           "description": "This clears only the scheduler's stored manual hold. It will not switch on heating or cancel an external boost. A physically off thermostat stays off."
+        },
+        "advanced": {
+          "title": "Add a heating zone",
+          "description": "Choose a single-target heating climate entity. Review limits and an initial baseline in its unit (Celsius or Fahrenheit). The baseline fills all seven days until edited. These are application bounds, not a protection guarantee. If heating control is already enabled for the scheduler, new enabled zones also participate. An optional existing boost timer establishes external ownership; configure its adapter in the card Settings.",
+          "data": {
+            "name": "Zone name",
+            "climate_entity": "Thermostat",
+            "minimum": "Reviewed minimum target",
+            "maximum": "Reviewed maximum target",
+            "baseline_temperature": "Initial all-day target",
+            "enabled": "Enable zone scheduling",
+            "manual_policy": "Resume after an observed manual target change",
+            "manual_minutes": "Hold duration in minutes (duration policy only)",
+            "boost_timer": "Existing boost timer entity ID (optional)"
+          }
+        },
+        "guided": {
+          "title": "1 \u00b7 Choose your thermostat",
+          "description": "Choose an available heating thermostat and a name. Nothing is created until the final review.",
+          "data": {
+            "name": "Zone name",
+            "climate_entity": "Thermostat"
+          }
+        },
+        "limits": {
+          "title": "2 \u00b7 Review temperatures",
+          "description": "These values use {unit}. The all-day target is a simple starting schedule for all seven days; edit periods visually in the card afterwards. Review the minimum carefully before using a low frost target.",
+          "data": {
+            "minimum": "Minimum allowed target",
+            "maximum": "Maximum allowed target",
+            "baseline_temperature": "Starting all-day target",
+            "back": "Go back"
+          }
+        },
+        "options": {
+          "title": "3 \u00b7 Optional features",
+          "description": "All targets use the thermostat unit. Optional person entity (person.name) keeps a minimum Mon\u2013Fri 08:30\u201316:30 when home. Other presence sensors, times and external boost scripts can be configured in the card later. Preheating needs measured heating cycles. Frost is optional; heating while Off requires its separate switch.",
+          "data": {
+            "boost_enabled": "Use built-in timed boost",
+            "boost_target": "Boost target",
+            "person": "Person entity ID (optional)",
+            "occupied_target": "Occupied minimum target",
+            "preheat_enabled": "Learn smart preheating",
+            "frost_enabled": "Enable frost minimum",
+            "frost_target": "Reviewed frost target",
+            "frost_while_off": "Allow temporary frost heating while Off",
+            "back": "Go back"
+          }
+        },
+        "review": {
+          "title": "4 \u00b7 Review before creating",
+          "description": "{summary}\n\nThe new zone is created DISABLED, even when this scheduler already controls other zones. Review its schedule and settings in the card, then enable zone scheduling through Manage thermostat and limits when ready. Saving this form does not command the thermostat.",
+          "data": {
+            "back": "Go back and edit"
+          }
         }
       },
       "error": {

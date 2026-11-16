@@ -83,6 +83,13 @@ class Controls(InsightControls):
             # Some device integrations report confirmations with a fresh context.
             # An exact response to our pending command is not a new manual hold.
             owned = True
+        frost_record = self.insights.read(zone.id, zone.limits)
+        cycle = frost_record.get("frost_cycle")
+        if cycle and (
+            (pending and pending[2] > now)
+            or (observation.mode == "heat" and observation.target == cycle["target"])
+        ):
+            owned = True
         previous = self.controller._previous.get(zone.id)
         if (
             data["boost"]
@@ -177,7 +184,10 @@ class Controls(InsightControls):
         if decision.inhibited:
             # Return to an explicit off suspension after a built-in boost.
             _, hold, _ = self.repository.read(zone.id, zone.limits)
-            if decision.source != "manual_off" or not hold or observation.mode == "off":
+            if (
+                decision.source != "frost_return_off"
+                and (decision.source != "manual_off" or not hold)
+            ) or observation.mode == "off":
                 return
             command = ("off", None)
         else:
@@ -251,7 +261,9 @@ class Controls(InsightControls):
             data = self.smart_record(zone_id)
             p, now = data["policy"], dt_util.utcnow()
             observation = self._observation(zone_id)
-            if action in {"insights", "reset_learning", "clear_history"}:
+            if action == "restore_configuration":
+                await self._restore_configuration(zone, payload)
+            elif action in {"insights", "reset_learning", "clear_history"}:
                 await self._insights_action(zone, action, payload)
             elif action == "policy":
                 if data["boost"] or observation.external_boost or data["external_operation"]:
@@ -478,7 +490,12 @@ class Controls(InsightControls):
                 self._command_state.clear()
             else:
                 raise ValidationError("Unsupported control action")
-            if action not in {"insights", "reset_learning", "clear_history"}:
+            if action not in {
+                "insights",
+                "reset_learning",
+                "clear_history",
+                "restore_configuration",
+            }:
                 await self.repository.smart_save(zone_id, data, zone.limits)
             if action == "policy":
                 self._refresh_completion_listeners()

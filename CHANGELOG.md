@@ -1,3 +1,12 @@
+# 0.5.0 — guided setup, frost protection and configuration transfer
+
+- Four-step HA zone wizard with capability-derived suggestions, review and disabled-by-default new zones.
+- Optional per-zone frost minimum, explicit Off permission, bounded recovery target and persisted restart/Off restoration intent.
+- Weekly schedule and zone-settings JSON export, validated preview/import, disabled-zone settings restoration and schedule copying.
+- Learning progress, estimated warm-up/start and last measured preheat result.
+- Preserve existing schedules, control intent, mini-card layout and learned models; new frost options default off.
+- See docs/SETUP_FROST_BACKUPS.md for scope, report-freshness and configuration-restore interruption limits.
+
 # 0.3.1 - boost migration and reload cleanup
 
 ## 0.4.0 — stable

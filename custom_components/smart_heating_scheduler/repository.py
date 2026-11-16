@@ -103,6 +103,23 @@ class Repository:
             candidate["zones"][zone_id]["hold"] = hold.to_dict() if hold else None
             await self._commit(candidate)
 
+    async def restore_configuration(self, zone_id, week, policy, limits, revision):
+        """Replace a disabled zone's saved week/policy in one storage commit."""
+        week = Week.parse(week, limits)
+        record = self.smart_read(zone_id, limits)
+        record["policy"] = policy
+        record = smart.validate(record, limits)
+        async with self._lock:
+            current = self.read(zone_id, limits)
+            if current is None or current[2] != revision:
+                raise RevisionConflict("Schedule changed; reopen the import preview")
+            candidate = self.snapshot()
+            candidate["zones"][zone_id]["week"] = week.to_dict()
+            candidate["zones"][zone_id]["revision"] = revision + 1
+            record["policy_revision"] = self.smart_read(zone_id, limits)["policy_revision"] + 1
+            candidate["smart"][zone_id] = record
+            await self._commit(candidate)
+
     async def _commit(self, candidate: dict) -> None:
         # Keep memory unchanged if the atomic storage write fails.
         await self._persistence.async_save(candidate)

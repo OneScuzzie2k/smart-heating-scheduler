@@ -1,8 +1,8 @@
 # Calendar profiles, history and measured preheating
 
-Stable integration **0.4.0**, paired with companion card **0.4.0**.
+Stable integration **0.5.0**, paired with companion card **0.5.0**.
 Existing weekly schedules, boost, occupancy and holiday settings are retained.
-All new profile and preheating controls start disabled/unmapped. History starts
+New zones default to unmapped profiles and disabled preheating; existing saved choices are preserved. History starts
 collecting when the updated integration is loaded. Preheating is optional: its
 algorithm is tested, while timing accuracy over real cycles remains field work.
 
@@ -111,7 +111,7 @@ intentional behavior change if profiles or early starts have been enabled.
 All feature mutations use the existing administrator-only, per-zone WebSocket
 control endpoint. History read access follows the mapped climate permission.
 The new card tolerates an older backend by explaining that an update is needed.
-The older card cannot configure these features, so use the paired 0.4.0 release.
+The older card cannot configure these features, so use the paired 0.5.0 release.
 
 Automated simulated HA and logic tests cover precedence, source failures, stale
 edits, limits, retention, learning thresholds, owner guards and restart intent.
@@ -120,12 +120,12 @@ validation limits. A stable package does not establish warm-up timing accuracy
 for every building or thermostat. Keep preheating optional and review its results.
 
 
-## Install or update to 0.4.0
+## Install or update to 0.5.0
 
 Keep a current HA settings backup. In Settings → Marketplace, install or update
-both packages to **0.4.0**. Including pre-releases is not required. Restart HA for
+both packages to **0.5.0**. Including pre-releases is not required. Restart HA for
 the backend update and refresh the browser/app after the card update. When moving
-from a development build, select stable 0.4.0 and exclude pre-releases if desired.
+from a development build, select stable 0.5.0 and exclude pre-releases if desired.
 
 Open Heating Control → Settings. **Add heating zone** opens HA's integration
 page in a new tab: choose Add heating zone, select an existing supported heating
