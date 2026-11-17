@@ -2,7 +2,7 @@
 
 A Home Assistant custom integration for weekly heating schedules, timed boost, occupancy overrides, holidays, calendar/Workday profiles and local heating history, with a companion Lovelace card. Optional smart preheating learns a measured warm-up rate for each zone.
 
-**Stable release 0.5.1:** install both the [integration](https://github.com/OneScuzzie2k/smart-heating-scheduler/releases/tag/0.5.1) and [companion card](https://github.com/OneScuzzie2k/smart-heating-scheduler-card/releases/tag/0.5.1). Including pre-releases is not required. See the [acceptance results and limits](docs/RELEASE_ACCEPTANCE.md) and [profiles/history/preheating guide](docs/PROFILES_HISTORY_PREHEATING.md).
+**Stable release 0.5.2:** install both the [integration](https://github.com/OneScuzzie2k/smart-heating-scheduler/releases/tag/0.5.2) and [companion card](https://github.com/OneScuzzie2k/smart-heating-scheduler-card/releases/tag/0.5.2). Including pre-releases is not required. See the [acceptance results and limits](docs/RELEASE_ACCEPTANCE.md) and [profiles/history/preheating guide](docs/PROFILES_HISTORY_PREHEATING.md).
 
 **[Installation and setup guide](docs/INSTALLATION.md)** - install both packages, add zones, configure the card and move from observe-only to heating control.
 
@@ -12,7 +12,7 @@ No separate add-on, third-party scheduler card, Node.js or user-installed Python
 
 New installations start in **observe only**. Heating control is a separate administrator action after reviewing every enabled zone.
 
-## New in 0.5.1
+## New in 0.5.2
 
 Guided zone setup, optional frost protection, schedule/settings backup and import, and clearer preheating feedback. New guided zones start disabled. [Read the setup and recovery guide](docs/SETUP_FROST_BACKUPS.md).
 
@@ -63,8 +63,8 @@ The HA test command requires Python >=3.14.2 with homeassistant==2026.11.1; stan
 
 1. Open **Settings > Marketplace > Add from link** and add this repository as an **Integration**:
    `https://github.com/OneScuzzie2k/smart-heating-scheduler`.
-2. Select stable integration version **0.5.1** and install. Follow any restart prompt. Including pre-releases is not required.
-3. Add the [companion card repository](https://github.com/OneScuzzie2k/smart-heating-scheduler-card) the same way as a **Dashboard** item; select **0.5.1** and reload your browser after installation.
+2. Select stable integration version **0.5.2** and install. Follow any restart prompt. Including pre-releases is not required.
+3. Add the [companion card repository](https://github.com/OneScuzzie2k/smart-heating-scheduler-card) the same way as a **Dashboard** item; select **0.5.2** and reload your browser after installation.
 4. Open **Settings > Devices & services > Add integration**, search for **Smart Heating Scheduler** and complete setup. Open its integration entry and choose **Add heating zone** for each thermostat.
 5. Add **Smart Heating Scheduler** from your dashboard's card picker, select the scheduler and build your weekly schedules while still in observe-only mode.
 
@@ -74,4 +74,4 @@ The HA test command requires Python >=3.14.2 with homeassistant==2026.11.1; stan
 
 ## Distribution status
 
-Published public GitHub releases, available as custom Marketplace repositories. Catalog inclusion is pending. Full bootstrap/config-flow coverage, more heating hardware, inheritance/bulk configuration, import/export, accessibility and translations remain follow-up work. Existing entry names are preserved; the card reports actual control mode. Guided zone setup and optional frost protection are included in 0.5.1; see [setup, frost and backup guidance](docs/SETUP_FROST_BACKUPS.md). MIT licensed. Public packages exclude home-specific audit and handover files.
+Published public GitHub releases, available as custom Marketplace repositories. Catalog inclusion is pending. Full bootstrap/config-flow coverage, more heating hardware, inheritance/bulk configuration, import/export, accessibility and translations remain follow-up work. Existing entry names are preserved; the card reports actual control mode. Guided zone setup and optional frost protection are included in 0.5.2; see [setup, frost and backup guidance](docs/SETUP_FROST_BACKUPS.md). MIT licensed. Public packages exclude home-specific audit and handover files.

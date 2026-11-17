@@ -1,3 +1,11 @@
+# 0.5.2 — scheduled preheating independent of presence
+
+- Away/unknown presence alone no longer blocks preheating of saved schedule periods.
+- Occupancy remains an additional minimum; preheating can raise it for a higher upcoming scheduled target and never lower it.
+- Explicit Away targets, manual/Off, boost, holiday and device guards retain priority.
+- Preserve the ordinary occupied floor if optional preheating persistence fails.
+- Report the actual pause reason in the companion card. No saved heating settings or learned models reset.
+
 # 0.5.1 — separate frost minimum
 
 - Allow frost below the normal schedule/manual minimum without changing normal target limits.

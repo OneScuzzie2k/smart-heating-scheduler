@@ -1,6 +1,6 @@
 # Installation and setup
 
-This guide covers stable integration **0.5.1** with companion card **0.5.1**. Start with observe-only comparison before a supervised heating-control test. See [release acceptance](RELEASE_ACCEPTANCE.md) for the tested setup and limits.
+This guide covers stable integration **0.5.2** with companion card **0.5.2**. Start with observe-only comparison before a supervised heating-control test. See [release acceptance](RELEASE_ACCEPTANCE.md) for the tested setup and limits.
 
 ## Requirements
 
@@ -20,8 +20,8 @@ Choose **Add from link**, enter each GitHub repository URL and confirm the repos
 
 | Package | GitHub repository | Type | Version |
 | --- | --- | --- | --- |
-| Backend | https://github.com/OneScuzzie2k/smart-heating-scheduler | Integration | `0.5.1` |
-| Companion card | https://github.com/OneScuzzie2k/smart-heating-scheduler-card | Dashboard | `0.5.1` |
+| Backend | https://github.com/OneScuzzie2k/smart-heating-scheduler | Integration | `0.5.2` |
+| Companion card | https://github.com/OneScuzzie2k/smart-heating-scheduler-card | Dashboard | `0.5.2` |
 
 Select the stable versions above; **Include pre-releases** is not required. If necessary, use **Install another version** to choose the tag. Prefer tagged versions for reproducible installations. A short commit hash in the installed-version display means a default-branch build; record it when reporting an issue. Enable Include pre-releases only if deliberately testing a development release.
 
@@ -38,7 +38,7 @@ These projects are custom repositories and are not yet catalog-listed. See the o
 5. Guided zones are created **disabled**. Add the desired periods in the card, review the optional rules, then enable zone scheduling through **Settings > Zone settings > Manage thermostat and limits**. Global observe-only mode also remains in force until the handover below.
 6. Repeat for other zones. Each thermostat can belong to only one zone. The starting target fills all seven days; old schedules are not imported automatically.
 
-See [guided setup, frost, backups and learning feedback](SETUP_FROST_BACKUPS.md) for all new 0.5.1 options.
+See [guided setup, frost, backups and learning feedback](SETUP_FROST_BACKUPS.md) for all new 0.5.2 options.
 
 ## 3. Add the full scheduler card
 
@@ -132,7 +132,7 @@ The built release bundle is ready to use. End users do not need to build the car
 
 | Symptom | Check |
 | --- | --- |
-| No release offered | Core is at least 2026.11.1; both repositories added; GitHub connected; refresh repository information; choose integration 0.5.1 and card 0.5.1. Include pre-releases is only needed for development versions. |
+| No release offered | Core is at least 2026.11.1; both repositories added; GitHub connected; refresh repository information; choose integration 0.5.2 and card 0.5.2. Include pre-releases is only needed for development versions. |
 | Integration not in Add integration | Backend files installed in the correct folder; follow restart prompt; search for Smart Heating Scheduler; inspect HA logs. |
 | Card type not found | Card repository installed; resource registered as a module once; reload the browser/app frontend. |
 | No scheduler or zones | Finish backend setup, choose Scheduler in the visual editor, add a zone, and confirm the user's entity permissions. |
@@ -145,7 +145,7 @@ The built release bundle is ready to use. End users do not need to build the car
 For an issue, include HA version, integration/card versions (or installed commit hashes), thermostat integration/model, expected/actual behaviour and a redacted relevant log excerpt. Remove tokens, location coordinates and private home details.
 
 
-## Profiles, history and preheating in 0.5.1
+## Profiles, history and preheating in 0.5.2
 
 Use Schedules → Calendar & workdays for optional named day profiles and rules.
 History has compact 1-hour, 24-hour and 7-day views and local retention controls.

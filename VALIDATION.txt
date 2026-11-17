@@ -1,3 +1,11 @@
+0.5.2 - presence/preheating separation
+------------------------------------
+99 standalone tests,40 real-HA simulated runtime tests,45 frontend/model/DOM tests
+pass. Covers Away/unknown while following schedule, explicit Away target priority,
+combined occupied floor/preheating and storage-failure preservation. Actual pause
+reasons shown in card. Existing settings/learning preserved. Live timing accuracy
+still requires useful measured warming observations.
+
 0.5.1 frost-range patch - local validation
 -----------------------------------------
 98 standalone tests,39 real-HA simulated runtime tests and44 frontend/model/DOM

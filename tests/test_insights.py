@@ -146,7 +146,6 @@ def test_preheat_starts_at_measured_deadline_and_holds_until_boundary_without_os
         "holiday",
         "boost",
         "away",
-        "occupied_comfort",
         "unavailable",
         "external_boost",
     ],
@@ -260,3 +259,23 @@ def test_old_insights_settings_gain_disabled_frost_without_resetting_learning():
     assert loaded["settings"]["frost_enabled"] is False
     assert loaded["settings"]["preheat_enabled"] is True
     assert loaded["model"]["samples"] == 12
+
+
+def test_preheating_and_occupied_minimum_combine_without_lowering_the_floor():
+    record = trained()
+    base = replace(decision(), source="occupied_comfort", target=18)
+    result, _ = insights.preheat(base, record, week(), NOW, TZ, 18)
+    assert result.source == "preheat" and result.target == 20
+    record = trained()
+    floor = replace(base, target=21)
+    result, _ = insights.preheat(floor, record, week(), NOW, TZ, 18)
+    assert result.target == 21 and result.source == "occupied_comfort"
+
+
+def test_preheat_pause_explains_actual_owner_or_profile_source():
+    _, info = insights.preheat(
+        replace(decision(), source="holiday"), trained(), week(), NOW, TZ, 18
+    )
+    assert info["pause_reason"] == "Holiday is active"
+    _, info = insights.preheat(decision(), trained(), week(), NOW, TZ, 18, allowed=False)
+    assert info["pause_reason"] == "Waiting for calendar or Workday data"

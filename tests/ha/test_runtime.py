@@ -340,6 +340,55 @@ class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(self.calls, [])
 
+    async def test_preheat_follows_schedule_while_away_or_unknown_and_respects_explicit_away_target(
+        self,
+    ):
+        from datetime import UTC, datetime, timedelta
+
+        from custom_components.smart_heating_scheduler.const import DAYS
+        from custom_components.smart_heating_scheduler.engine import Week
+
+        await self.configure_builtin()
+        now = (datetime.now(UTC) + timedelta(days=1)).replace(
+            hour=6, minute=0, second=0, microsecond=0
+        )
+        zone = self.runtime.zones["zone_a"]
+        periods = [{"start": "00:00", "temperature": 16}, {"start": "06:30", "temperature": 20}]
+        await self.runtime.repository.save_week(
+            zone.id, Week.parse({d: periods for d in DAYS}, zone.limits).to_dict(), zone.limits, 1
+        )
+        record = self.runtime.insights.read(zone.id, zone.limits)
+        record["settings"]["preheat_enabled"] = True
+        record["model"] = {"rate": 2, "samples": 12, "minutes": 60, "updated": now.isoformat()}
+        await self.runtime.insights.save(zone.id, record)
+        policy = self.runtime.smart_record(zone.id)
+        policy["policy"].update(
+            entities=[{"entity_id": "person.test", "home_state": "home", "away_state": "not_home"}],
+            away_minutes=0,
+            unknown_minutes=0,
+            unknown_fallback="schedule",
+        )
+        await self.runtime.repository.smart_save(zone.id, policy, zone.limits)
+        with patch(
+            "custom_components.smart_heating_scheduler.runtime.dt_util.utcnow", return_value=now
+        ):
+            for state in ("not_home", "unknown"):
+                self.hass.states.async_set("person.test", state)
+                await self.runtime.async_evaluate()
+                self.assertEqual(self.runtime.status[zone.id]["source"], "preheat")
+                self.assertEqual(self.runtime.status[zone.id]["target"], 20)
+            policy = self.runtime.smart_record(zone.id)
+            policy["policy"]["away_target"] = 16
+            await self.runtime.repository.smart_save(zone.id, policy, zone.limits)
+            self.hass.states.async_set("person.test", "not_home")
+            await self.runtime.async_evaluate()
+            self.assertEqual(self.runtime.status[zone.id]["source"], "away")
+            self.assertEqual(
+                self.runtime.insight_status[zone.id]["preheat"]["pause_reason"],
+                "Configured Away temperature is active",
+            )
+        self.assertEqual(self.calls, [])
+
     async def test_measured_preheating_writes_only_when_enabled_and_respects_off(self):
         from datetime import UTC, datetime, timedelta
 
@@ -419,6 +468,25 @@ class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.runtime.status[zone.id]["target"], 16)
         self.assertTrue(self.runtime.insight_status[zone.id]["warnings"])
         self.assertTrue(all(call.data.get("temperature") != 23 for call in self.calls))
+        policy = self.runtime.smart_record(zone.id)
+        policy["policy"].update(
+            entities=[{"entity_id": "person.test", "home_state": "home", "away_state": "not_home"}],
+            comfort_target=18,
+            comfort_days=list(DAYS),
+            comfort_start="00:00",
+            comfort_end="23:59",
+        )
+        await self.runtime.repository.smart_save(zone.id, policy, zone.limits)
+        self.hass.states.async_set("person.test", "home")
+        with (
+            patch.object(self.runtime.insights, "save", AsyncMock(side_effect=OSError)),
+            patch(
+                "custom_components.smart_heating_scheduler.runtime.dt_util.utcnow", return_value=now
+            ),
+        ):
+            await self.runtime.async_evaluate()
+        self.assertEqual(self.runtime.status[zone.id]["target"], 18)
+        self.assertEqual(self.runtime.status[zone.id]["source"], "occupied_comfort")
 
     async def test_reload_after_startup_does_not_unregister_consumed_listener(self):
         from homeassistant.const import EVENT_HOMEASSISTANT_STARTED

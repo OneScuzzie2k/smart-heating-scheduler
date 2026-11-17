@@ -173,10 +173,10 @@ class InsightControls:
     ):
         entity = self.hass.states.get(self.mappings[zone.id][0])
         attrs = entity.attributes if entity else {}
-        # Occupancy, including an unresolved/unknown configured presence source,
-        # must not be bypassed by speculative early heating.
-        presence_configured = bool(self.smart_record(zone.id)["policy"]["entities"])
-        allowed = not warnings and (not presence_configured or effective == "home")
+        # Presence alone does not own the thermostat. Preheat the saved schedule
+        # regardless of occupancy unless an actual configured override wins.
+        allowed = not warnings
+        ordinary_decision = decision
         original = deepcopy(record)
         if zone.id not in self._learning_started:
             if record["samples"]:
@@ -235,8 +235,13 @@ class InsightControls:
                 self._insight_storage_failed.add(zone.id)
                 record = original
                 warnings.append("History could not be saved; preheating paused")
-        if storage_error and decision.source in {"preheat", "frost", "frost_return_off"}:
-            # A failed optional-history write cannot result in untracked early heat.
+        if storage_error and decision.source == "preheat":
+            # Keep the actual ordinary owner, including an occupied minimum.
+            decision = replace(
+                ordinary_decision, reason="Preheating storage unavailable; using current rule"
+            )
+            preheat.update(state="paused", pause_reason="Preheating storage unavailable")
+        elif storage_error and decision.source in {"frost", "frost_return_off"}:
             decision = replace(
                 decision,
                 target=None,
@@ -244,19 +249,7 @@ class InsightControls:
                 inhibited=True,
                 reason="Optional control state could not be saved; commands paused",
             )
-            if decision.source == "error" and frost_status["state"] not in {
-                "active",
-                "proposed",
-                "returning_off",
-            }:
-                decision = replace(
-                    decision,
-                    target=decision.schedule_target,
-                    source="schedule",
-                    inhibited=False,
-                    reason="Following schedule; preheating storage unavailable",
-                )
-            preheat["state"] = "paused"
+            preheat.update(state="paused", pause_reason="Optional control storage unavailable")
             frost_status["state"] = "unavailable"
         self.insight_status[zone.id] = {
             "days": selected,

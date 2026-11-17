@@ -262,14 +262,30 @@ def preheat(decision, record, week, now, timezone, room, *, allowed=True):
         ),
         "last_result": record.get("warmup_result"),
         "estimated_minutes": None,
+        "pause_reason": None,
     }
     if not settings["preheat_enabled"]:
         record["preheat"] = None
         return decision, info
     info["state"] = "learning"
-    if not allowed or decision.inhibited or decision.source != "schedule":
+    if not allowed or decision.inhibited or decision.source not in {"schedule", "occupied_comfort"}:
         record["preheat"] = None
         info["state"] = "paused"
+        info["pause_reason"] = (
+            "Waiting for calendar or Workday data"
+            if not allowed
+            else {
+                "off": "Paused while thermostat is Off",
+                "manual_off": "Paused while thermostat is Off",
+                "manual": "Manual temperature is active",
+                "boost": "Timed boost is active",
+                "external_boost": "External boost is active",
+                "holiday": "Holiday is active",
+                "away": "Configured Away temperature is active",
+                "unavailable": "Waiting for thermostat",
+                "disabled": "Zone scheduling is disabled",
+            }.get(decision.source, "Another control rule is active")
+        )
         return decision, info
     if type(room) not in (int, float) or not math.isfinite(room):
         record["preheat"] = None
@@ -280,6 +296,8 @@ def preheat(decision, record, week, now, timezone, room, *, allowed=True):
         until = timestamp(active["until"])
         if (
             until > utc(now)
+            and active["target"]
+            > max(decision.schedule_target, decision.target or decision.schedule_target)
             and week.next_boundary(now, timezone) == until
             and week.current(until, timezone).temperature == active["target"]
         ):
@@ -317,7 +335,10 @@ def preheat(decision, record, week, now, timezone, room, *, allowed=True):
         if boundary > horizon:
             break
         target = week.current(boundary, timezone).temperature
-        if target > decision.schedule_target and target > room:
+        if (
+            target > max(decision.schedule_target, decision.target or decision.schedule_target)
+            and target > room
+        ):
             minutes = min(
                 settings["preheat_max_minutes"],
                 (target - room) / model["rate"] * 60 + settings["preheat_margin_minutes"],

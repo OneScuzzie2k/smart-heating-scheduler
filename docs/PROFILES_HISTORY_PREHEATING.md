@@ -1,6 +1,6 @@
 # Calendar profiles, history and measured preheating
 
-Stable integration **0.5.1**, paired with companion card **0.5.1**.
+Stable integration **0.5.2**, paired with companion card **0.5.2**.
 Existing weekly schedules, boost, occupancy and holiday settings are retained.
 New zones default to unmapped profiles and disabled preheating; existing saved choices are preserved. History starts
 collecting when the updated integration is loaded. Preheating is optional: its
@@ -89,10 +89,7 @@ temperature early does not cause setback/heat cycling. Original absolute intent
 survives reload/restart if still applicable; it is rechecked against current rules
 and the current schedule/profile before being used.
 
-Preheating only supplements the schedule owner. It pauses for manual/Off, disabled
-or unavailable zones, boost/external handover, holiday, occupancy overrides/Away,
-unknown occupancy on configured presence inputs, uncertain profile sources, and
-missing room temperature. Observe-only mode computes proposals but sends no
+Preheating follows the saved schedule independently of presence. Away or unknown presence alone does not pause it. An occupied minimum is an additional floor and can combine with an earlier, higher scheduled target; preheating never lowers that floor. It pauses for manual/Off, disabled or unavailable zones, boost/external handover, holiday, an explicitly configured Away temperature, uncertain profile sources, and missing room temperature. Observe-only mode computes proposals but sends no
 climate commands. Storage failure pauses speculative early heat.
 
 This first model estimates a warming rate. It does **not** model weather, solar
@@ -111,7 +108,7 @@ intentional behavior change if profiles or early starts have been enabled.
 All feature mutations use the existing administrator-only, per-zone WebSocket
 control endpoint. History read access follows the mapped climate permission.
 The new card tolerates an older backend by explaining that an update is needed.
-The older card cannot configure these features, so use the paired 0.5.1 release.
+The older card cannot configure these features, so use the paired 0.5.2 release.
 
 Automated simulated HA and logic tests cover precedence, source failures, stale
 edits, limits, retention, learning thresholds, owner guards and restart intent.
@@ -120,12 +117,12 @@ validation limits. A stable package does not establish warm-up timing accuracy
 for every building or thermostat. Keep preheating optional and review its results.
 
 
-## Install or update to 0.5.1
+## Install or update to 0.5.2
 
 Keep a current HA settings backup. In Settings → Marketplace, install or update
-both packages to **0.5.1**. Including pre-releases is not required. Restart HA for
+both packages to **0.5.2**. Including pre-releases is not required. Restart HA for
 the backend update and refresh the browser/app after the card update. When moving
-from a development build, select stable 0.5.1 and exclude pre-releases if desired.
+from a development build, select stable 0.5.2 and exclude pre-releases if desired.
 
 Open Heating Control → Settings. **Add heating zone** opens HA's integration
 page in a new tab: choose Add heating zone, select an existing supported heating
