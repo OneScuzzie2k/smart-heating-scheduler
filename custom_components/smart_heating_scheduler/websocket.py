@@ -1,12 +1,12 @@
-"""Versioned card API. Read permissions follow mapped climates; edits are admin-only."""
+"""Versioned card API. Entity permissions gate boost; configuration edits are admin-only."""
 
 import math
 
 import probatio as vol
-from homeassistant.auth.permissions.const import POLICY_READ
+from homeassistant.auth.permissions.const import POLICY_CONTROL, POLICY_READ
 from homeassistant.components import websocket_api
 from homeassistant.core import callback
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, Unauthorized
 from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
@@ -25,6 +25,30 @@ def loaded_entry(hass, entry_id):
 
 def finite(value):
     return value if type(value) in (int, float) and math.isfinite(value) else None
+
+
+def can_boost(runtime, user, zone_id):
+    """Authorize household boost without delegating configuration or arbitrary services."""
+    if zone_id not in runtime.zones:
+        return False
+    climate = runtime.mappings[zone_id][0]
+    if not all(
+        user.permissions.check_entity(climate, policy) for policy in (POLICY_READ, POLICY_CONTROL)
+    ):
+        return False
+    policy = runtime.smart_record(zone_id)["policy"]
+    if policy["boost_owner"] == "external":
+        # Script/helper calls execute in the runtime, so check their permissions here.
+        return all(
+            user.permissions.check_entity(entity_id, POLICY_CONTROL)
+            for entity_id in (
+                policy["start_script"],
+                policy["cancel_script"],
+                policy["duration_helper"],
+            )
+            if entity_id
+        )
+    return True
 
 
 def dashboard(hass, entry, user):
@@ -60,6 +84,7 @@ def dashboard(hass, entry, user):
                 "id": zone_id,
                 "name": entry.subentries[zone_id].title,
                 "climate_entity": entity_id,
+                "can_boost": can_boost(runtime, user, zone_id),
                 "unit": unit,
                 "current_temperature": finite(attrs.get("current_temperature")),
                 "device_target": finite(attrs.get("temperature")),
@@ -236,7 +261,6 @@ async def save_schedule(hass, connection, msg):
         connection.send_result(msg["id"], snapshot)
 
 
-@websocket_api.require_admin
 @websocket_api.websocket_command(
     {
         vol.Required("type"): f"{DOMAIN}/control",
@@ -264,9 +288,29 @@ async def save_schedule(hass, connection, msg):
 )
 @websocket_api.async_response
 async def control_action(hass, connection, msg):
+    boost = msg["action"] in {"boost_start", "boost_cancel"}
+    if not boost and not connection.user.is_admin:
+        connection.send_error(msg["id"], "unauthorized", "Administrator access required")
+        return
     try:
         entry = loaded_entry(hass, msg["entry_id"])
-        await entry.runtime_data.async_control_action(msg["action"], msg["zone_id"], msg["payload"])
+
+        def authorize():
+            # Run inside the control lock: an adapter may change while waiting.
+            if boost and not can_boost(entry.runtime_data, connection.user, msg["zone_id"]):
+                raise Unauthorized()
+            if not boost and not connection.user.is_admin:
+                raise Unauthorized()
+
+        await entry.runtime_data.async_control_action(
+            msg["action"], msg["zone_id"], msg["payload"], authorize=authorize
+        )
+    except Unauthorized:
+        connection.send_error(
+            msg["id"],
+            "unauthorized",
+            "Control permission required for this zone and its boost adapter",
+        )
     except (ValidationError, ValueError, TypeError, KeyError) as err:
         connection.send_error(msg["id"], "invalid_control", str(err))
     except HomeAssistantError:

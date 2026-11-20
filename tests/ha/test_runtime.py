@@ -897,9 +897,10 @@ class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_control_action_denies_non_admin_and_requires_mode_acknowledgement(self):
         await self.configure_builtin()
-        connection, _ = self.connection(admin=False)
-        with self.assertRaises(Unauthorized):
-            card_api.control_action(self.hass, connection, {"id": 1})
+        connection, messages = self.connection(admin=False)
+        card_api.control_action(self.hass, connection, {"id": 1, "action": "mode"})
+        await self.hass.async_block_till_done(wait_background_tasks=True)
+        self.assertEqual(messages, [("error", "unauthorized")])
         with self.assertRaises(ValidationError):
             await self.runtime.async_control_action("mode", "zone_a", {"enabled": True})
         self.assertFalse(self.runtime.repository.control_enabled)
@@ -1100,10 +1101,15 @@ class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
             )
         self.assertEqual(self.calls, [])
 
-    def connection(self, *, admin=True, read=True):
+    def connection(self, *, admin=True, read=True, control=True, denied=()):
         messages = []
         user = SimpleNamespace(
-            is_admin=admin, permissions=SimpleNamespace(check_entity=lambda entity_id, policy: read)
+            is_admin=admin,
+            permissions=SimpleNamespace(
+                check_entity=lambda entity_id, policy: (
+                    entity_id not in denied and (read if policy == "read" else control)
+                )
+            ),
         )
         connection = SimpleNamespace(
             user=user,
@@ -1113,6 +1119,139 @@ class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
             send_error=lambda message_id, code, message: messages.append(("error", code)),
         )
         return connection, messages
+
+    async def test_household_boost_start_cancel_without_configuration_access(self):
+        await self.configure_builtin()
+        connection, messages = self.connection(admin=False)
+        snapshot = card_api.dashboard(self.hass, self.entry, connection.user)
+        self.assertFalse(snapshot["can_edit"])
+        self.assertTrue(snapshot["zones"][0]["can_boost"])
+        with patch.object(card_api, "loaded_entry", return_value=self.entry):
+            for action in ("boost_start", "boost_cancel"):
+                card_api.control_action(
+                    self.hass,
+                    connection,
+                    {
+                        "id": 1,
+                        "entry_id": "test",
+                        "zone_id": "zone_a",
+                        "action": action,
+                        "payload": {"target": 23, "minutes": 15},
+                    },
+                )
+                await self.hass.async_block_till_done(wait_background_tasks=True)
+                self.assertEqual(messages[-1][0], "result")
+                self.assertEqual(
+                    bool(self.runtime.smart_record("zone_a")["boost"]), action == "boost_start"
+                )
+        self.assertEqual(self.calls, [])  # observe-only still never actuates
+
+    async def test_household_boost_denies_missing_entity_permissions_and_unknown_zone(self):
+        await self.configure_builtin()
+        for permissions in (
+            {"control": False},
+            {"read": False},
+            {"denied": ("climate.test_zone",)},
+        ):
+            connection, messages = self.connection(admin=False, **permissions)
+            snapshot = card_api.dashboard(self.hass, self.entry, connection.user)
+            self.assertTrue(not snapshot["zones"] or not snapshot["zones"][0]["can_boost"])
+            with patch.object(card_api, "loaded_entry", return_value=self.entry):
+                for zone_id in ("zone_a", "other_zone"):
+                    for action in ("boost_start", "boost_cancel"):
+                        card_api.control_action(
+                            self.hass,
+                            connection,
+                            {
+                                "id": 1,
+                                "entry_id": "test",
+                                "zone_id": zone_id,
+                                "action": action,
+                                "payload": {"target": 23, "minutes": 15},
+                            },
+                        )
+                        await self.hass.async_block_till_done(wait_background_tasks=True)
+                        self.assertEqual(messages[-1], ("error", "unauthorized"))
+        self.assertIsNone(self.runtime.smart_record("zone_a")["boost"])
+        self.assertEqual(self.calls, [])
+
+    async def test_household_cannot_forge_configuration_or_unbounded_boost(self):
+        await self.configure_builtin()
+        connection, messages = self.connection(admin=False)
+        with patch.object(card_api, "loaded_entry", return_value=self.entry):
+            for action in (
+                "policy",
+                "presence",
+                "holiday",
+                "reconcile",
+                "resume",
+                "retry",
+                "mode",
+                "insights",
+                "reset_learning",
+                "clear_history",
+                "restore_configuration",
+            ):
+                card_api.control_action(
+                    self.hass,
+                    connection,
+                    {
+                        "id": 1,
+                        "entry_id": "test",
+                        "zone_id": "zone_a",
+                        "action": action,
+                        "payload": {},
+                    },
+                )
+                await self.hass.async_block_till_done(wait_background_tasks=True)
+                self.assertEqual(messages[-1], ("error", "unauthorized"))
+            card_api.control_action(
+                self.hass,
+                connection,
+                {
+                    "id": 1,
+                    "entry_id": "test",
+                    "zone_id": "zone_a",
+                    "action": "boost_start",
+                    "payload": {"minutes": 999999, "target": 99},
+                },
+            )
+            await self.hass.async_block_till_done(wait_background_tasks=True)
+            self.assertEqual(messages[-1], ("error", "invalid_control"))
+        self.assertIsNone(self.runtime.smart_record("zone_a")["boost"])
+        self.assertEqual(self.calls, [])
+
+    async def test_external_boost_requires_adapter_permissions(self):
+        await self.runtime.async_setup()
+        policy = self.runtime.smart_record("zone_a")["policy"]
+        policy.update(
+            boost_owner="external",
+            boost_target=25,
+            start_script="script.test_start",
+            cancel_script="script.test_stop",
+            duration_helper="input_number.duration",
+        )
+        with patch.object(self.runtime, "smart_record", return_value={"policy": policy}):
+            for denied in ("script.test_start", "script.test_stop", "input_number.duration"):
+                connection, messages = self.connection(admin=False, denied=(denied,))
+                self.assertFalse(card_api.can_boost(self.runtime, connection.user, "zone_a"))
+                with patch.object(card_api, "loaded_entry", return_value=self.entry):
+                    card_api.control_action(
+                        self.hass,
+                        connection,
+                        {
+                            "id": 1,
+                            "entry_id": "test",
+                            "zone_id": "zone_a",
+                            "action": "boost_start",
+                            "payload": {},
+                        },
+                    )
+                    await self.hass.async_block_till_done(wait_background_tasks=True)
+                    self.assertEqual(messages[-1], ("error", "unauthorized"))
+            connection, _ = self.connection(admin=False)
+            self.assertTrue(card_api.can_boost(self.runtime, connection.user, "zone_a"))
+        self.assertEqual(self.calls, [])
 
     async def test_card_snapshot_filters_entity_permissions_and_has_no_location_data(self):
         await self.runtime.async_setup()

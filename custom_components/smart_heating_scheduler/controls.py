@@ -250,9 +250,11 @@ class Controls(InsightControls):
         ):
             raise ValidationError("Start and cancel must be separate scripts")
 
-    async def async_control_action(self, action, zone_id, payload):
-        """Only admin WebSocket handlers invoke this method. Never arbitrary services."""
+    async def async_control_action(self, action, zone_id, payload, *, authorize=None):
+        """Authorized WebSocket handlers invoke this method. Never arbitrary services."""
         async with self._lock:
+            if authorize is not None:
+                authorize()
             if self._closed:
                 raise ValidationError("Scheduler is unloading")
             if zone_id not in self.zones:

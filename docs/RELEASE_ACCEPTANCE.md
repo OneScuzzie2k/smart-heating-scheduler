@@ -1,3 +1,9 @@
+# Release acceptance — 0.5.3
+
+Non-administrators with mapped thermostat read/control permission can start/cancel bounded boost. External adapters additionally check script/helper control permissions. All other scheduler mutations remain administrator-only.
+
+99 standalone tests, 44 real-HA simulated runtime tests and 46 frontend/model/DOM tests pass locally. Coverage includes denied access, forged settings commands, adapter permissions, full/mini boost and disconnected cards. Live acceptance as a household non-admin remains to be confirmed after installation.
+
 # Release acceptance — 0.5.1
 
 - 98 standalone logic/storage tests, 39 real Home Assistant runtime tests with simulated devices, and 44 frontend/model/DOM tests pass.

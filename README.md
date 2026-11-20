@@ -2,7 +2,7 @@
 
 A Home Assistant custom integration for weekly heating schedules, timed boost, occupancy overrides, holidays, calendar/Workday profiles and local heating history, with a companion Lovelace card. Optional smart preheating learns a measured warm-up rate for each zone.
 
-**Stable release 0.5.2:** install both the [integration](https://github.com/OneScuzzie2k/smart-heating-scheduler/releases/tag/0.5.2) and [companion card](https://github.com/OneScuzzie2k/smart-heating-scheduler-card/releases/tag/0.5.2). Including pre-releases is not required. See the [acceptance results and limits](docs/RELEASE_ACCEPTANCE.md) and [profiles/history/preheating guide](docs/PROFILES_HISTORY_PREHEATING.md).
+**Stable release 0.5.3:** install both the [integration](https://github.com/OneScuzzie2k/smart-heating-scheduler/releases/tag/0.5.3) and [companion card](https://github.com/OneScuzzie2k/smart-heating-scheduler-card/releases/tag/0.5.3). Including pre-releases is not required. See the [acceptance results and limits](docs/RELEASE_ACCEPTANCE.md) and [profiles/history/preheating guide](docs/PROFILES_HISTORY_PREHEATING.md).
 
 **[Installation and setup guide](docs/INSTALLATION.md)** - install both packages, add zones, configure the card and move from observe-only to heating control.
 
@@ -12,7 +12,7 @@ No separate add-on, third-party scheduler card, Node.js or user-installed Python
 
 New installations start in **observe only**. Heating control is a separate administrator action after reviewing every enabled zone.
 
-## New in 0.5.2
+## New in 0.5.3
 
 Guided zone setup, optional frost protection, schedule/settings backup and import, and clearer preheating feedback. New guided zones start disabled. [Read the setup and recovery guide](docs/SETUP_FROST_BACKUPS.md).
 
@@ -42,7 +42,7 @@ The companion card on desktop and phone. These screenshots use sample data from 
 - Generic external boost adapter with awaited start/cancel scripts, fixed target declaration, timer ownership, optional duration helper and filtered completion signal.
 - Explicit presence entities/state meanings, any/all logic, configurable delays, unknown grace/fallback, expiring Home/Away overrides and optional occupied comfort minimum.
 - Per-zone holiday dates/targets and acknowledged built-in boost exceptions; current-rule resumption on return.
-- Administrator-only mutations, permission-filtered card subscriptions, stale policy/schedule rejection, minimal diagnostics and three status sensors per zone.
+- Administrator-only configuration, thermostat-permission-checked household boost, permission-filtered card subscriptions, stale policy/schedule rejection, minimal diagnostics and three status sensors per zone.
 - Optional serialized/throttled climate commands with three-attempt limits, availability guards and explicit handover faults.
 
 Read [control policies](docs/CONTROL_POLICIES.md) for priority, configuration, adapter contracts, restart handling and remaining limitations. No home-specific IDs or policies are bundled. Targets are entered in the chosen climate unit; no Celsius default is imposed on Fahrenheit installations.
@@ -63,8 +63,8 @@ The HA test command requires Python >=3.14.2 with homeassistant==2026.11.1; stan
 
 1. Open **Settings > Marketplace > Add from link** and add this repository as an **Integration**:
    `https://github.com/OneScuzzie2k/smart-heating-scheduler`.
-2. Select stable integration version **0.5.2** and install. Follow any restart prompt. Including pre-releases is not required.
-3. Add the [companion card repository](https://github.com/OneScuzzie2k/smart-heating-scheduler-card) the same way as a **Dashboard** item; select **0.5.2** and reload your browser after installation.
+2. Select stable integration version **0.5.3** and install. Follow any restart prompt. Including pre-releases is not required.
+3. Add the [companion card repository](https://github.com/OneScuzzie2k/smart-heating-scheduler-card) the same way as a **Dashboard** item; select **0.5.3** and reload your browser after installation.
 4. Open **Settings > Devices & services > Add integration**, search for **Smart Heating Scheduler** and complete setup. Open its integration entry and choose **Add heating zone** for each thermostat.
 5. Add **Smart Heating Scheduler** from your dashboard's card picker, select the scheduler and build your weekly schedules while still in observe-only mode.
 
@@ -74,4 +74,8 @@ The HA test command requires Python >=3.14.2 with homeassistant==2026.11.1; stan
 
 ## Distribution status
 
-Published public GitHub releases, available as custom Marketplace repositories. Catalog inclusion is pending. Full bootstrap/config-flow coverage, more heating hardware, inheritance/bulk configuration, import/export, accessibility and translations remain follow-up work. Existing entry names are preserved; the card reports actual control mode. Guided zone setup and optional frost protection are included in 0.5.2; see [setup, frost and backup guidance](docs/SETUP_FROST_BACKUPS.md). MIT licensed. Public packages exclude home-specific audit and handover files.
+Published public GitHub releases, available as custom Marketplace repositories. Catalog inclusion is pending. Full bootstrap/config-flow coverage, more heating hardware, inheritance/bulk configuration, import/export, accessibility and translations remain follow-up work. Existing entry names are preserved; the card reports actual control mode. Guided zone setup and optional frost protection are included in 0.5.3; see [setup, frost and backup guidance](docs/SETUP_FROST_BACKUPS.md). MIT licensed. Public packages exclude home-specific audit and handover files.
+
+## Household boost permissions
+
+Non-administrators can start and stop boost and choose its duration/target in the full or mini card when their Home Assistant account can read and control the mapped thermostat. Schedules, occupancy/holiday rules, heating handover and settings remain administrator-only. External boost adapters also require control permission on the configured start/cancel scripts and optional duration helper. Install both integration and card 0.5.3, restart Home Assistant, then reload the browser/Companion app frontend. No administrator promotion is needed.

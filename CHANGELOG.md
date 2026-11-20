@@ -1,3 +1,9 @@
+# 0.5.3 — household boost permissions
+
+Non-administrators with mapped thermostat read/control permission can start/cancel bounded boost. External adapters additionally check script/helper control permissions. All other scheduler mutations remain administrator-only.
+
+99 standalone tests, 44 real-HA simulated runtime tests and 46 frontend/model/DOM tests pass locally. Coverage includes denied access, forged settings commands, adapter permissions, full/mini boost and disconnected cards. Live acceptance as a household non-admin remains to be confirmed after installation.
+
 # 0.5.2 — scheduled preheating independent of presence
 
 - Away/unknown presence alone no longer blocks preheating of saved schedule periods.
