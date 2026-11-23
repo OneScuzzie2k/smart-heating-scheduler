@@ -10,6 +10,8 @@ Requires **Home Assistant Core 2026.11.1 or newer** and an existing available, s
 
 No separate add-on, third-party scheduler card, Node.js or user-installed Python package is needed to run it. Your thermostat/device integration remains required. Existing boost scripts/helpers are optional: choose built-in boost if you do not use them.
 
+Development branch only: `0.6.0-dev.3` adds guarded Hive/ZHA receiver scheduling with configurable HA preheating and occupancy overrides. It requires per-receiver clock/transition/timer qualification and explicit handover; no automatic migration. [Receiver setup and limits](docs/receiver-scheduling.md).
+
 New installations start in **observe only**. Heating control is a separate administrator action after reviewing every enabled zone.
 
 ## New in 0.5.3

@@ -85,22 +85,32 @@ class ReceiverQualification:
         return self.manager.runtime
 
     def active(self, zone_id):
-        return (
+        return self.manager.transition.active(zone_id) or (
             self.manager.data["zones"].get(zone_id, {}).get("qualification", {}).get("state")
             in ACTIVE
         )
 
     def owns_observation(self, zone_id, now):
         q = self.manager.data["zones"].get(zone_id, {}).get("qualification", {})
-        return self.active(zone_id) or bool(
-            q.get("ignore_manual_until") and timestamp(q["ignore_manual_until"]) > now
+        transition = self.manager.data["zones"].get(zone_id, {}).get("transition", {})
+        transition_grace = (
+            transition.get("state") == "restored"
+            and timestamp(transition["updated_at"]) + timedelta(seconds=10) > now
+        )
+        return (
+            self.active(zone_id)
+            or transition_grace
+            or bool(q.get("ignore_manual_until") and timestamp(q["ignore_manual_until"]) > now)
         )
 
     def resume(self):
         if self.manager.error:
             return
         for zone_id in self.runtime.zones:
-            if self.active(zone_id):
+            if (
+                self.manager.data["zones"].get(zone_id, {}).get("qualification", {}).get("state")
+                in ACTIVE
+            ):
                 self.recovery.add(zone_id)
                 self._schedule(zone_id, seconds=1)
 

@@ -94,12 +94,14 @@ def boost_attributes(target):
 
 
 def control_attributes(attributes):
-    """Only the three internal qualification operations can reach the radio."""
+    """Only reviewed Schedule, Off, finite-lease and Manual operations reach the radio."""
     if not isinstance(attributes, dict) or any(
         type(value) is not int for value in attributes.values()
     ):
         raise ValidationError("Invalid internal receiver mode write")
     if attributes == {"system_mode": 4, "temp_setpoint_hold": 0}:
+        return dict(attributes)
+    if attributes == {"system_mode": 0, "temp_setpoint_hold": 0}:
         return dict(attributes)
     if set(attributes) != set(STATE_ATTRIBUTES[:4]):
         raise ValidationError("Invalid internal receiver mode write")

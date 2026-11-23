@@ -38,7 +38,11 @@ class Repository:
             raw = {**raw, "schema": 2, "smart": {}, "control_enabled": False}
         if (
             not isinstance(raw, dict)
-            or set(raw) != {"schema", "zones", "smart", "control_enabled"}
+            or set(raw)
+            not in (
+                {"schema", "zones", "smart", "control_enabled"},
+                {"schema", "zones", "smart", "control_enabled", "native"},
+            )
             or type(raw["schema"]) is not int
             or raw["schema"] != 2
             or not isinstance(raw["zones"], dict)
@@ -46,7 +50,36 @@ class Repository:
             or type(raw["control_enabled"]) is not bool
         ):
             raise ValidationError("Unsupported or malformed stored scheduler data")
+        if "native" in raw:
+            from .receiver_owner import validate_owner
+
+            if not isinstance(raw["native"], dict):
+                raise ValidationError("Invalid receiver ownership storage")
+            for owner in raw["native"].values():
+                validate_owner(owner)
         self._data = deepcopy(raw)
+
+    def native_read(self, zone_id):
+        return deepcopy(self._data.get("native", {}).get(zone_id))
+
+    async def native_save(self, zone_id, owner, *, week=None, revision=None, limits=None):
+        from .receiver_owner import validate_owner
+
+        if owner is not None:
+            validate_owner(owner)
+        async with self._lock:
+            candidate = self.snapshot()
+            if week is not None:
+                current = self.read(zone_id, limits)
+                if current[2] != revision:
+                    raise RevisionConflict("Schedule changed during native receiver write")
+                candidate["zones"][zone_id]["week"] = Week.parse(week, limits).to_dict()
+                candidate["zones"][zone_id]["revision"] = revision + 1
+            if owner is None:
+                candidate.setdefault("native", {}).pop(zone_id, None)
+            else:
+                candidate.setdefault("native", {})[zone_id] = deepcopy(owner)
+            await self._commit(candidate)
 
     def snapshot(self) -> dict:
         return deepcopy(self._data)

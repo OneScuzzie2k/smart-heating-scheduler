@@ -78,6 +78,13 @@ def dashboard(hass, entry, user):
         timer = hass.states.get(timer_id) if timer_id else None
         builtin = smart["boost"]
         observed = runtime._observation(zone_id)
+        native_owner = runtime.receivers.owner.record(zone_id)
+        native_hardware = runtime.receivers.owner.hardware.get(zone_id, {})
+        native_external_boost = native_hardware.get(
+            "mode"
+        ) == "boost" and not runtime.receivers.owner.owned_boost(
+            native_owner or {}, native_hardware
+        )
         frost_limits = runtime._frost_limits(zone)
         result["zones"].append(
             {
@@ -127,7 +134,11 @@ def dashboard(hass, entry, user):
                 ),
                 "boost": {
                     "owner": smart["policy"]["boost_owner"],
-                    "active": bool(builtin or (timer and timer.state in {"active", "paused"})),
+                    "active": bool(
+                        native_external_boost
+                        or builtin
+                        or (timer and timer.state in {"active", "paused"})
+                    ),
                     "until": builtin["until"]
                     if builtin
                     else timer.attributes.get("finishes_at")
@@ -150,6 +161,7 @@ def dashboard(hass, entry, user):
                         )
                         and not smart["external_operation"]
                         and not builtin
+                        and not native_external_boost
                         and not (timer and timer.state != "idle")
                     ),
                     "can_cancel": bool(
@@ -348,6 +360,15 @@ async def control_action(hass, connection, msg):
                 "start_test",
                 "check_test",
                 "restore_test",
+                "read_clock",
+                "synchronize_clock",
+                "prepare_transition",
+                "start_transition",
+                "check_transition",
+                "restore_transition",
+                "enable_owner",
+                "disable_owner",
+                "adopt_owner_week",
             ]
         ),
         vol.Required("payload"): dict,
@@ -369,6 +390,15 @@ async def receiver_action(hass, connection, msg):
             "start_test": {"test_id", "acknowledgement"},
             "check_test": set(),
             "restore_test": set(),
+            "read_clock": set(),
+            "synchronize_clock": {"acknowledgement"},
+            "prepare_transition": {"revision"},
+            "start_transition": {"test_id", "acknowledgement"},
+            "check_transition": set(),
+            "restore_transition": set(),
+            "enable_owner": {"revision", "acknowledgement"},
+            "disable_owner": {"acknowledgement"},
+            "adopt_owner_week": {"revision", "snapshot_digest", "acknowledgement"},
         }
         if set(payload) != allowed[action]:
             raise ValidationError("Invalid receiver request fields")
@@ -387,6 +417,13 @@ async def receiver_action(hass, connection, msg):
                     "start_test",
                     "check_test",
                     "restore_test",
+                    "synchronize_clock",
+                    "start_transition",
+                    "check_transition",
+                    "restore_transition",
+                    "enable_owner",
+                    "disable_owner",
+                    "adopt_owner_week",
                 }
                 else (POLICY_READ,)
             )

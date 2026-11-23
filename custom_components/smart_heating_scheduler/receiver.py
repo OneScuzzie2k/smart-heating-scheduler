@@ -18,7 +18,10 @@ from homeassistant.util import dt as dt_util
 from . import native_schedule as native
 from .engine import ValidationError, timestamp
 from .native_receiver import validate_state
+from .receiver_clock import clock_report, expected_clock, validate_clock
+from .receiver_owner import ReceiverOwner
 from .receiver_qualification import ReceiverQualification, validate_qualification
+from .receiver_transition import ReceiverTransition, validate_transition
 from .receiver_zha import find_receiver
 from .repository import RevisionConflict
 
@@ -34,6 +37,8 @@ class ReceiverSchedules:
         self.tasks = set()
         self._storage_lock = asyncio.Lock()
         self.qualification = ReceiverQualification(self)
+        self.transition = ReceiverTransition(self)
+        self.owner = ReceiverOwner(self)
 
     async def load(self):
         try:
@@ -55,6 +60,8 @@ class ReceiverSchedules:
                     "transactions",
                     "hardware",
                     "qualification",
+                    "clock",
+                    "transition",
                 }:
                     raise ValidationError("Invalid receiver backup record")
                 if any(
@@ -87,6 +94,10 @@ class ReceiverSchedules:
                     validate_state(record["hardware"]["state"])
                 if "qualification" in record:
                     validate_qualification(record["qualification"])
+                if "clock" in record:
+                    validate_clock(record["clock"]["values"])
+                if "transition" in record:
+                    validate_transition(record["transition"])
             self.data = deepcopy(data)
         except (ValidationError, KeyError, TypeError, OSError, AttributeError, HomeAssistantError):
             # Optional receiver inspection must not break existing HA schedules.
@@ -120,12 +131,22 @@ class ReceiverSchedules:
         result = {
             "state": "error" if self.error else state,
             "error": self.error,
-            "schedule_owner": "home_assistant",
-            "handover_available": False,
+            "schedule_owner": "receiver" if self.owner.record(zone_id) else "home_assistant",
+            "handover_available": bool(
+                record.get("transition", {}).get("first_observed")
+                and record.get("transition", {}).get("second_observed")
+                and record.get("transition", {}).get("restoration_verified")
+                and not record.get("transition", {}).get("error")
+                and record.get("qualification", {}).get("expiry_passed")
+                and record.get("qualification", {}).get("restoration_verified")
+            ),
+            "ownership": self.owner.summary(zone_id),
             "read_at": record.get("snapshot", {}).get("at"),
             "backup_count": len(transactions),
         }
         q = record.get("qualification")
+        result["clock"] = record.get("clock")
+        result["transition"] = record.get("transition")
         result["qualification"] = (
             {
                 key: q.get(key)
@@ -185,6 +206,8 @@ class ReceiverSchedules:
         async with self._storage_lock:
             if q := record.get("qualification"):
                 q["updated_at"] = dt_util.utcnow().isoformat()
+            if q := record.get("transition"):
+                q["updated_at"] = dt_util.utcnow().isoformat()
             candidate = deepcopy(self.data)
             candidate["zones"][zone_id] = deepcopy(record)
             await self.store.async_save(candidate)
@@ -197,8 +220,53 @@ class ReceiverSchedules:
         task = asyncio.current_task()
         self.tasks.add(task)
         try:
+            if action in {"enable_owner", "disable_owner", "adopt_owner_week"}:
+                return await self.owner.action(zone_id, action, payload, authorize)
             async with self.locks.setdefault(zone_id, asyncio.Lock()):
                 self._check(zone_id, authorize)
+                if self.owner.record(zone_id) and action not in {"read", "inspect", "read_clock"}:
+                    raise ValidationError(
+                        "Return to HA ownership before qualification or manual timetable copying"
+                    )
+                if self.transition.active(zone_id) and action in {
+                    "prepare_test",
+                    "start_test",
+                    "check_test",
+                    "restore_test",
+                }:
+                    raise ValidationError("Finish the active transition test first")
+                if action in {"read_clock", "synchronize_clock"}:
+                    if self.qualification.active(zone_id):
+                        raise ValidationError("Finish the current hardware test first")
+                    if action == "synchronize_clock":
+                        self._check(zone_id, authorize, write=True)
+                        if payload.get("acknowledgement") != "SYNCHRONIZE RECEIVER CLOCK":
+                            raise ValidationError("Type SYNCHRONIZE RECEIVER CLOCK to confirm")
+                    adapter = self._adapter(zone_id)
+                    timezone = self.runtime.hass.config.time_zone
+                    before = await adapter.read_clock()
+                    record = self._record(zone_id)
+                    record["clock"] = clock_report(before, timezone, dt_util.utcnow())
+                    if action == "synchronize_clock":
+                        record["clock"]["before_synchronization"] = before
+                        await self._save(zone_id, record)
+                        self._check(zone_id, authorize, write=True)
+                        expected = expected_clock(timezone, dt_util.utcnow())
+                        await adapter.synchronize_clock({**expected, "time_status": 2})
+                        values = await adapter.read_clock()
+                        record["clock"] = {
+                            **clock_report(values, timezone, dt_util.utcnow()),
+                            "before_synchronization": before,
+                        }
+                    await self._save(zone_id, record)
+                    return self.snapshot(zone_id, details=True)
+                if action in {
+                    "prepare_transition",
+                    "start_transition",
+                    "check_transition",
+                    "restore_transition",
+                }:
+                    return await self.transition.execute(zone_id, action, payload, authorize)
                 if action in {
                     "inspect",
                     "prepare_test",
@@ -357,5 +425,6 @@ class ReceiverSchedules:
 
     def close(self):
         self.qualification.close()
+        self.transition.close()
         for task in tuple(self.tasks):
             task.cancel()

@@ -12,6 +12,7 @@ from homeassistant.util import dt as dt_util
 from . import smart
 from .engine import Hold, ValidationError, timestamp
 from .insight_controls import InsightControls
+from .native_receiver import current_target
 
 
 class Controls(InsightControls):
@@ -69,6 +70,9 @@ class Controls(InsightControls):
         await self.async_evaluate()
 
     async def _smart_evaluate(self, zone, observation, now):
+        native_owner = self.receivers.owner.record(zone.id)
+        if native_owner:
+            await self.receivers.owner.observe(zone, now)
         data = self.smart_record(zone.id)
         original = self.smart_record(zone.id)
         policy = data["policy"]
@@ -142,6 +146,7 @@ class Controls(InsightControls):
             now,
             detect_manual=(
                 not owned
+                and not native_owner
                 and not data["boost"]
                 and not data["external_operation"]
                 and not self.receivers.qualification.owns_observation(zone.id, now)
@@ -150,6 +155,37 @@ class Controls(InsightControls):
         )
         if base.source == "schedule" and profile_days[0]["source"] != "weekly":
             base = replace(base, reason=f"{profile_days[0]['profile']}: {base.reason}")
+        if native_owner and not self.insights.read(zone.id, zone.limits).get("frost_cycle"):
+            native_state = self.receivers.owner.hardware[zone.id]
+            native_mode = native_state["mode"]
+            adjusted = (
+                native_mode == "schedule"
+                and not native_owner.get("lease")
+                and native_state["target"]
+                != current_target(native_owner["week"], now.astimezone(self.controller.timezone))
+            )
+            if native_mode == "off":
+                base = replace(
+                    base, source="off", target=None, inhibited=True, reason="Receiver is Off"
+                )
+            elif native_mode == "manual" or adjusted:
+                base = replace(
+                    base,
+                    source="manual",
+                    target=native_state["target"] / 100,
+                    inhibited=False,
+                    reason="Receiver temperature override",
+                )
+            elif native_mode == "boost" and not self.receivers.owner.owned_boost(
+                native_owner, native_state
+            ):
+                base = replace(
+                    base,
+                    source="external_boost",
+                    target=native_state["target"] / 100,
+                    inhibited=True,
+                    reason="Native boost outside this scheduler",
+                )
         decision = smart.resolve_smart(base, data, effective, now, self.controller.timezone)
         decision = await self._finish_insights(
             zone,
@@ -184,6 +220,8 @@ class Controls(InsightControls):
             )
 
     async def _write(self, zone, observation, decision, status, now):
+        if await self.receivers.owner.write(zone, decision, status, now):
+            return
         if not observation.available:
             self._command_state.pop(zone.id, None)
         if decision.inhibited:
@@ -286,6 +324,11 @@ class Controls(InsightControls):
                 data["policy_revision"] += 1
                 data["presence"] = smart.defaults()["presence"]
                 data = smart.validate(data, zone.limits)
+                if (
+                    self.receivers.owner.record(zone_id)
+                    and data["policy"]["boost_owner"] == "external"
+                ):
+                    raise ValidationError("Receiver scheduling uses built-in or disabled boosts")
                 self._validate_entities(data)
                 for other_id in self.zones:
                     if other_id == zone_id:
@@ -472,7 +515,9 @@ class Controls(InsightControls):
                 if not observation.available or not observation.supported:
                     raise ValidationError("An available, supported thermostat is required")
                 await self.controller.resume(zone)
-                if self.repository.control_enabled and observation.mode == "off":
+                if self.repository.control_enabled and self.receivers.owner.record(zone_id):
+                    await self.receivers.owner.resume(zone_id)
+                elif self.repository.control_enabled and observation.mode == "off":
                     await self._call(
                         "climate",
                         "set_hvac_mode",

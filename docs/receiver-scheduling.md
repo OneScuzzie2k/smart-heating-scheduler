@@ -1,12 +1,12 @@
 # Receiver-backed heating: architecture and rollout
 
 This work is on `feature/receiver-schedule-foundation`. It is not part of the
-stable release and does not change the active controller.
+stable release. Existing zones stay HA-owned until an explicit verified handover.
 
 ## Intended behaviour
 
 Each zone chooses a schedule owner. Ordinary HA scheduling remains available for
-other thermostats. A supported Hive/ZHA receiver can eventually own its weekly
+other thermostats. A qualified Hive/ZHA receiver can own its weekly
 schedule: HA reads and edits that same timetable, while the receiver executes it.
 No hot-water entities, controls or endpoint writes are included.
 
@@ -140,3 +140,48 @@ states exist. Validate desktop/tablet/mobile, light/dark themes, keyboard/touch,
 equal-height cards, ordinary household boost permissions and locked boost dials.
 Run the existing HA-owned controller regression suite as well as native-mode
 tests before releasing.
+
+
+## 0.6.0-dev.3: guarded receiver ownership
+
+This development build adds clock synchronisation, a supervised two-boundary
+qualification, and an explicit per-zone receiver owner. It does not migrate any
+existing zone automatically. Generic thermostats keep their existing HA writer.
+
+For a reviewed Hive/ZHA heating receiver, pause competing hold/schedule controllers,
+back up HA, and pause the zone. Read the clock, type the synchronization acknowledgement,
+and verify both current time and the active/next DST rules. Run the native timer
+qualification first, then prepare/start the five-minute lower-temperature transition
+check. Both boundaries and exact timetable/Manual restoration must be confirmed.
+Only then copy/verify the desired saved HA week and choose Use verified receiver
+schedule. Re-enable the zone for smart features. Do not restart HA during transition
+qualification; a missed boundary is not a pass. Current winter timing plus programmed
+DST readback is not a live test of a future DST change.
+
+The receiver runs its ordinary week independently of HA. Occupancy floors, preheating,
+calendar/day profiles, holiday targets and schedule-origin boosts use renewable
+**two-minute native boosts**. Their priorities/settings stay in the existing zone UI.
+HA renews an applicable lease while connected; on HA/radio failure it expires back to
+Schedule. Rule endings cancel only this scheduler's own lease and read back the current
+scheduled target, rather than a target cached at the start. Physical Off, Manual and
+unrelated native boosts are respected. Resume schedule is explicit.
+
+Existing Manual/Off-origin boosts and temporary frost heating while Off retain
+**HA-dependent restoration**. They are not claimed to return to Off/Manual without
+HA. Their original state is durable and restored when HA resumes; a later different
+physical setting is respected. The receiver's native Off frost floor is separate from
+HA's configurable frost target. External script boost adapters are for HA-owned zones;
+choose built-in or disabled boosts before receiver handover.
+
+Save week on a receiver-owned zone writes changed native days, verifies all seven,
+then atomically commits the HA week/revision and receiver ownership metadata. A partial
+write or lost acknowledgement stays unresolved and never enables the old HA baseline
+writer. Read/review a physically edited native week and import it while the zone is
+paused; native Off/carryover formats that cannot be represented losslessly are rejected.
+Whole-zone backup imports require returning to HA ownership first.
+
+Receiver mode and HA rule reason are displayed separately. Keep forced-hold automations
+paused while receiver ownership is active. To roll back or downgrade, pause the zone,
+finish boosts/leases, choose Return to HA scheduling and verify Manual mode, then
+re-enable the zone and any reviewed legacy hold adapter. Do not downgrade while an
+ownership marker is active: older builds cannot understand the new fail-closed marker.

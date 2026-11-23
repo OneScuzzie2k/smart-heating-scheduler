@@ -12,6 +12,7 @@ import asyncio
 from .engine import ValidationError
 from .native_receiver import STATE_ATTRIBUTES, control_attributes, receiver_state
 from .native_schedule import ScheduleReplies, command
+from .receiver_clock import CLOCK_ATTRIBUTES, validate_clock
 
 
 class ZhaReceiver:
@@ -19,6 +20,37 @@ class ZhaReceiver:
         self.cluster = cluster
         self.identity = identity
         self.timeout = timeout
+
+    async def read_clock(self):
+        try:
+            clock = self.cluster.endpoint.in_clusters[0x000A]
+            async with asyncio.timeout(self.timeout):
+                values, failed = await clock.read_attributes(
+                    list(CLOCK_ATTRIBUTES), allow_cache=False
+                )
+            if failed:
+                raise ValidationError("Receiver cannot provide a complete fresh clock")
+            return validate_clock(values)
+        except ValidationError:
+            raise
+        except Exception as err:
+            raise ValidationError("Fresh receiver clock read failed") from err
+
+    async def synchronize_clock(self, values):
+        # LocalTime is computed/read-only. Do not touch reporting/bindings.
+        values = validate_clock({**values, "local_time": values.get("local_time", 0)})
+        attributes = {key: value for key, value in values.items() if key != "local_time"}
+        try:
+            async with asyncio.timeout(self.timeout):
+                result = await self.cluster.endpoint.in_clusters[0x000A].write_attributes(
+                    attributes
+                )
+            if not result or any(record.status != 0 for record in result[0]):
+                raise ValidationError("Receiver rejected clock synchronization; read it again")
+        except ValidationError:
+            raise
+        except Exception as err:
+            raise ValidationError("Receiver clock synchronization is unverified") from err
 
     async def read_state(self):
         try:

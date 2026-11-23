@@ -45,13 +45,13 @@ class NativeStateTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             receiver_state({})
 
-    def test_only_bounded_qualification_operations_are_allowed(self):
+    def test_only_reviewed_control_operations_are_allowed(self):
         self.assertEqual(manual_attributes(manual())["temp_setpoint_hold_duration"], 65535)
         self.assertEqual(
             control_attributes(boost_attributes(1600))["temp_setpoint_hold_duration"], 2
         )
         for attrs in (
-            {"system_mode": 0, "temp_setpoint_hold": 0},
+            {"system_mode": 1, "temp_setpoint_hold": 0},
             {"system_mode": 4, "temp_setpoint_hold": False},
             {**boost_attributes(1600), "temp_setpoint_hold_duration": 65535},
             {**boost_attributes(1600), "occupied_heating_setpoint": 1655},

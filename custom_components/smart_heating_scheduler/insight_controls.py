@@ -306,6 +306,8 @@ class InsightControls:
 
     async def _restore_configuration(self, zone, payload):
         """Import reviewed configuration only while this destination is disabled."""
+        if self.receivers.owner.record(zone.id):
+            raise ValidationError("Return to HA ownership before restoring a whole zone backup")
         from . import smart
 
         if zone.enabled or payload.get("acknowledgement") != "RESTORE ZONE SETTINGS":

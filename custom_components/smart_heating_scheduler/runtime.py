@@ -159,6 +159,7 @@ class Runtime(Controls):
                 )
             )
         self.receivers.qualification.resume()
+        self.receivers.transition.resume()
 
     @callback
     def _registry_changed(self, event):
@@ -269,7 +270,16 @@ class Runtime(Controls):
 
     async def async_save_week(self, zone_id, week, revision):
         zone = self.zones[zone_id]
-        result = await self.repository.save_week(zone_id, week, zone.limits, revision)
+        task = asyncio.current_task()
+        self.receivers.tasks.add(task)
+        try:
+            async with self._lock:
+                if self.receivers.owner.record(zone_id):
+                    result = await self.receivers.owner.save_week_locked(zone_id, week, revision)
+                else:
+                    result = await self.repository.save_week(zone_id, week, zone.limits, revision)
+        finally:
+            self.receivers.tasks.discard(task)
         await self.async_evaluate()
         return result
 

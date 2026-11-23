@@ -34,6 +34,88 @@ from custom_components.smart_heating_scheduler.sensor import async_setup_entry a
 
 
 class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_native_owner_keeps_preheat_and_additive_occupancy_in_the_real_rule_pipeline(
+        self,
+    ):
+        from datetime import UTC, datetime, timedelta
+
+        from custom_components.smart_heating_scheduler.const import DAYS
+        from custom_components.smart_heating_scheduler.engine import Week
+        from custom_components.smart_heating_scheduler.native_schedule import digest, from_week
+        from tests.ha.test_receiver_transition import BoundaryReceiver
+
+        await self.configure_builtin()
+        now = datetime(2026, 11, 23, 6, tzinfo=UTC)
+        zone = self.runtime.zones["zone_a"]
+        week = Week.parse(
+            {
+                d: [{"start": "00:00", "temperature": 16}, {"start": "06:30", "temperature": 20}]
+                for d in DAYS
+            },
+            zone.limits,
+        )
+        await self.runtime.repository.save_week(zone.id, week.to_dict(), zone.limits, 1)
+        native = from_week(week.to_dict(), zone.limits, "°C")
+        adapter = BoundaryReceiver(native)
+        adapter.state.update(mode="schedule", hold=0)
+        adapter.now = now
+        self.runtime.receivers.factory = lambda *_: adapter
+        owner = {
+            "state": "active",
+            "week": native,
+            "digest": digest(native),
+            "identity": adapter.identity,
+            "mapping": list(self.runtime.mappings[zone.id]),
+            "revision": 2,
+            "timezone": "Europe/London",
+            "clock_checked": now.isoformat(),
+            "at": now.isoformat(),
+            "lease": None,
+            "error": None,
+        }
+        await self.runtime.repository.native_save(zone.id, owner)
+        record = self.runtime.insights.read(zone.id, zone.limits)
+        record["settings"]["preheat_enabled"] = True
+        record["model"] = {"rate": 2, "samples": 12, "minutes": 60, "updated": now.isoformat()}
+        await self.runtime.insights.save(zone.id, record)
+        self.hass.states.async_set(
+            "climate.test_zone",
+            "heat",
+            {**self.attrs, "temperature": 16, "current_temperature": 19},
+        )
+        await self.runtime.repository.set_control(True)
+        policy = self.runtime.smart_record(zone.id)
+        policy["policy"].update(
+            entities=[{"entity_id": "person.test", "home_state": "home", "away_state": "not_home"}],
+            away_minutes=0,
+            return_minutes=0,
+            comfort_target=20,
+            comfort_days=["mon"],
+            comfort_start="08:30",
+            comfort_end="16:30",
+        )
+        await self.runtime.repository.smart_save(zone.id, policy, zone.limits)
+        with patch("homeassistant.util.dt.utcnow", side_effect=lambda: adapter.now):
+            self.hass.states.async_set("person.test", "not_home")
+            await self.runtime.async_evaluate()
+            self.assertEqual(self.runtime.status[zone.id]["source"], "preheat")
+            self.assertEqual(adapter.state["mode"], "boost")
+            self.assertEqual(adapter.state["duration"], 2)
+            # Move to daytime setback with the normal five-period baseline.
+            periods = [{"start": "00:00", "temperature": 16}, {"start": "16:30", "temperature": 20}]
+            await self.runtime.async_save_week(zone.id, {d: periods for d in DAYS}, 2)
+            adapter.now = now.replace(hour=12)
+            self.hass.states.async_set("person.test", "home")
+            await self.runtime.async_evaluate()
+            self.assertEqual(self.runtime.status[zone.id]["source"], "occupied_comfort")
+            self.assertEqual(adapter.state["target"], 2000)
+            self.hass.states.async_set("person.test", "not_home")
+            adapter.now += timedelta(seconds=1)
+            await self.runtime.async_evaluate()
+            self.assertEqual(adapter.state["mode"], "schedule")
+            self.assertEqual(adapter.state["target"], 1600)
+        self.assertEqual(self.calls, [])  # No generic weekly climate writer was used.
+
     async def test_native_qualification_modes_are_not_recorded_as_manual_temperature_changes(self):
         from dataclasses import replace
 
