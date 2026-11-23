@@ -1,3 +1,10 @@
+# 0.6.0-dev.1 — receiver schedule foundation (unreleased)
+
+- Optional heating-only Hive/ZHA timetable read, compare, guarded copy and backup restore.
+- Durable before/after backups and seven-day readback verification; interrupted copies remain unresolved after restart.
+- Admin-only receiver tools. Existing HA scheduling remains in charge; receiver mode handover and HA overlays are not enabled in this stage.
+- See [the architecture and hardware acceptance plan](docs/receiver-scheduling.md).
+
 # 0.5.3 — household boost permissions
 
 Non-administrators with mapped thermostat read/control permission can start/cancel bounded boost. External adapters additionally check script/helper control permissions. All other scheduler mutations remain administrator-only.

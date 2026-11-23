@@ -1,6 +1,9 @@
 {
   "domain": "smart_heating_scheduler",
   "name": "Smart Heating Scheduler",
+  "after_dependencies": [
+    "zha"
+  ],
   "categories": [
     "climate.thermostats_heating"
   ],
@@ -17,5 +20,5 @@
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/OneScuzzie2k/smart-heating-scheduler/issues",
   "requirements": [],
-  "version": "0.5.3"
+  "version": "0.6.0-dev.1"
 }

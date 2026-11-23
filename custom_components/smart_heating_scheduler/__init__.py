@@ -46,3 +46,5 @@ async def async_remove_entry(hass, entry):
 
     await Store(hass, STORAGE_VERSION, f"{DOMAIN}.{entry.entry_id}").async_remove()
     await Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.insights").async_remove()
+
+    await Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.receivers").async_remove()

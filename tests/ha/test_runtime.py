@@ -4,6 +4,7 @@ Run with Python >=3.14.2 and homeassistant==2026.11.1 installed:
 python -m unittest tests.ha.test_runtime -v
 """
 
+import asyncio
 import json
 import tempfile
 import unittest
@@ -1033,6 +1034,13 @@ class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
         self.runtime.close()
         await self.hass.async_block_till_done(wait_background_tasks=True)
         await self.hass.async_stop(force=True)
+        # Stop listeners can schedule a final atomic Store write. Drain it before
+        # removing the temporary config directory, especially on Windows.
+        await self.hass.async_block_till_done(wait_background_tasks=True)
+        # A cancelled evaluation can leave its already-running disk worker alive.
+        # IsolatedAsyncioTestCase owns this loop, so join its executor before
+        # deleting the fixture; the normal runner shutdown happens too late.
+        await asyncio.get_running_loop().shutdown_default_executor()
         self.temp.cleanup()
 
     async def test_preview_setup_storage_sensors_and_unload_never_actuate(self):
@@ -1281,6 +1289,32 @@ class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(Unauthorized):
             card_api.save_schedule(self.hass, connection, {"id": 1})
         self.assertEqual(messages, [])
+
+    async def test_receiver_endpoint_rejects_household_users_before_hardware_lookup(self):
+        connection, messages = self.connection(admin=False)
+        with self.assertRaises(Unauthorized):
+            card_api.receiver_action(self.hass, connection, {"id": 1})
+        self.assertEqual(messages, [])
+        self.assertEqual(self.calls, [])
+
+    async def test_receiver_write_endpoint_rechecks_control_permissions(self):
+        await self.runtime.async_setup()
+        connection, messages = self.connection(control=False)
+        with patch.object(card_api, "loaded_entry", return_value=self.entry):
+            card_api.receiver_action(
+                self.hass,
+                connection,
+                {
+                    "id": 1,
+                    "entry_id": "test",
+                    "zone_id": "zone_a",
+                    "action": "write",
+                    "payload": {"plan_id": "test", "acknowledgement": "WRITE RECEIVER TIMETABLE"},
+                },
+            )
+            await self.hass.async_block_till_done(wait_background_tasks=True)
+        self.assertEqual(messages[-1], ("error", "unauthorized"))
+        self.assertEqual(self.calls, [])
 
     async def test_card_schedule_save_checks_revision_and_never_actuates(self):
         await self.runtime.async_setup()

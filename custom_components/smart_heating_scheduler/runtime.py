@@ -30,6 +30,7 @@ from .controller import PreviewController, Zone
 from .controls import Controls
 from .engine import Limits, Observation, ValidationError, Week, number, timestamp
 from .insights import InsightsRepository
+from .receiver import ReceiverSchedules
 from .repository import Repository
 
 _LOGGER = logging.getLogger(__name__)
@@ -62,11 +63,15 @@ class Runtime(Controls):
         self._closed = False
         self._evaluation_tasks = set()
         self._init_controls()
+        self.receivers = ReceiverSchedules(
+            self, Store(hass, 1, f"{DOMAIN}.{entry.entry_id}.receivers", atomic_writes=True)
+        )
 
     async def async_setup(self):
         try:
             await self.repository.load()
             await self.insights.load()
+            await self.receivers.load()
             ids = set()
             for subentry in self.entry.subentries.values():
                 if subentry.subentry_type != "zone":
@@ -277,6 +282,7 @@ class Runtime(Controls):
         if self._closed:
             return
         self._closed = True
+        self.receivers.close()
         for task in tuple(self._evaluation_tasks):
             task.cancel()
         self._evaluation_tasks.clear()

@@ -102,6 +102,7 @@ def dashboard(hass, entry, user):
                 }
                 if frost_limits
                 else None,
+                "receiver": runtime.receivers.snapshot(zone_id),
                 "manual_policy": zone.manual_policy,
                 "manual_minutes": zone.manual_minutes,
                 "enabled": zone.enabled,
@@ -176,6 +177,7 @@ def async_register_api(hass):
         save_schedule,
         list_schedulers,
         control_action,
+        receiver_action,
     ):
         websocket_api.async_register_command(hass, command)
     hass.data[f"{DOMAIN}_websocket_registered"] = True
@@ -327,3 +329,61 @@ async def control_action(hass, connection, msg):
         )
     else:
         connection.send_result(msg["id"], dashboard(hass, entry, connection.user))
+
+
+@websocket_api.require_admin
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): f"{DOMAIN}/receiver",
+        vol.Required("entry_id"): str,
+        vol.Required("zone_id"): str,
+        vol.Required("action"): vol.In(["read", "prepare", "prepare_restore", "write"]),
+        vol.Required("payload"): dict,
+    }
+)
+@websocket_api.async_response
+async def receiver_action(hass, connection, msg):
+    try:
+        entry = loaded_entry(hass, msg["entry_id"])
+        runtime = entry.runtime_data
+        zone_id, action, payload = msg["zone_id"], msg["action"], msg["payload"]
+        allowed = {
+            "read": set(),
+            "prepare": {"revision"},
+            "prepare_restore": {"revision", "backup_id"},
+            "write": {"plan_id", "acknowledgement"},
+        }
+        if set(payload) != allowed[action]:
+            raise ValidationError("Invalid receiver request fields")
+
+        def authorize():
+            if not connection.user.is_admin:
+                raise Unauthorized()
+            if zone_id not in runtime.mappings:
+                raise ValidationError("Unknown zone")
+            entity_id = runtime.mappings[zone_id][0]
+            policies = (POLICY_READ, POLICY_CONTROL) if action == "write" else (POLICY_READ,)
+            if not all(connection.user.permissions.check_entity(entity_id, p) for p in policies):
+                raise Unauthorized()
+
+        result = await runtime.receivers.execute(zone_id, action, payload, authorize)
+    except Unauthorized:
+        connection.send_error(
+            msg["id"],
+            "unauthorized",
+            "Receiver operation requires administrator entity permissions",
+        )
+    except RevisionConflict as err:
+        connection.send_error(msg["id"], "receiver_conflict", str(err))
+    except (ValidationError, ValueError, KeyError, TypeError) as err:
+        connection.send_error(msg["id"], "receiver_error", str(err))
+    except OSError:
+        connection.send_error(
+            msg["id"], "save_failed", "Receiver backup could not be saved; do not switch ownership"
+        )
+    except (HomeAssistantError, TimeoutError):
+        connection.send_error(
+            msg["id"], "receiver_error", "Receiver operation failed; read back before retrying"
+        )
+    else:
+        connection.send_result(msg["id"], result)
