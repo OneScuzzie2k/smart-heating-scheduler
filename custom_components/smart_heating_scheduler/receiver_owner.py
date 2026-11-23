@@ -319,6 +319,42 @@ class ReceiverOwner:
             and hardware["duration"] in {0, 1, 2}
         )
 
+    async def set_mode(self, zid, mode, target=None):
+        """Explicit card action, serialized with native overlay writes."""
+        async with self.manager.locks.setdefault(zid, asyncio.Lock()):
+            owner = self.record(zid)
+            adapter = self.check(zid, owner)
+            current = await adapter.read_state()
+            if current["mode"] == "boost" and not self.owned_boost(owner, current):
+                raise ValidationError("Finish the external receiver boost first")
+            attrs = {"system_mode": 0, "temp_setpoint_hold": 0}
+            if mode == "manual":
+                target = self.runtime.zones[zid].limits.validate(target)
+                attrs = {
+                    "system_mode": 4,
+                    "temp_setpoint_hold": 1,
+                    "temp_setpoint_hold_duration": 65535,
+                    "occupied_heating_setpoint": round(target * 100),
+                }
+            elif mode != "off":
+                raise ValidationError("Choose Manual or Off; use Resume for Schedule")
+            owner.update(state="activating", lease=None, error=None)
+            await self.save(zid, owner)
+            try:
+                await adapter.write_control(attrs)
+                actual = await adapter.read_state()
+                if actual["mode"] != mode or (
+                    mode == "manual" and actual["target"] != round(target * 100)
+                ):
+                    raise ValidationError("Receiver mode change is unverified")
+                self.hardware[zid] = actual
+                owner["state"] = "active"
+                await self.save(zid, owner)
+            except Exception:
+                owner.update(state="uncertain", error="Explicit receiver mode needs review")
+                await self.save(zid, owner)
+                raise
+
     async def write(self, zone, decision, status, now):
         zid = zone.id
         owner = self.record(zid)

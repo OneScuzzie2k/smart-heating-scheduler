@@ -47,8 +47,10 @@ class ZhaReceiver:
                 result = await self.cluster.endpoint.in_clusters[0x000A].write_attributes(
                     attributes
                 )
-            if not result or any(record.status != 0 for record in result[0]):
-                raise ValidationError("Receiver rejected clock synchronization; read it again")
+            # A Master receiver can reject its already-correct Time attribute
+            # while accepting DST fields in the same frame. The caller MUST
+            # verify every fresh clock field; acknowledgement alone is no proof.
+            return bool(result) and all(record.status == 0 for record in result[0])
         except ValidationError:
             raise
         except Exception as err:

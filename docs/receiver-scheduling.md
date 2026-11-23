@@ -208,3 +208,9 @@ covered by the complete HA rule-pipeline test.
 
 Do not use dev.3 for receiver handover; use dev.4 or later. Existing HA-owned
 schedules remain supported and no owner changes happen automatically.
+
+## Hive-inspired controls in 0.6.0-dev.5
+
+Choose the optional Hive-inspired style in the companion card editor. Schedule explicitly resumes the verified timetable; Manual establishes a native hold at the selected target; Off stops the zone and cancels an integration-owned boost. External receiver boosts are not cancelled implicitly. These mode controls require administrator access; household boost permissions are unchanged. Generic supported thermostats use HA climate commands and the configured manual-hold policy.
+
+A receiver can partially reject clock writes because it is already the time master. Synchronisation now records the acknowledgement separately and always validates a complete fresh readback. A rejected acknowledgement cannot qualify a clock with mismatched timezone, DST, UTC or local time.

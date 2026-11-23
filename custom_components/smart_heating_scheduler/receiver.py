@@ -257,11 +257,14 @@ class ReceiverSchedules:
                         await self._save(zone_id, record)
                         self._check(zone_id, authorize, write=True)
                         expected = expected_clock(timezone, dt_util.utcnow())
-                        await adapter.synchronize_clock({**expected, "time_status": 2})
+                        acknowledged = await adapter.synchronize_clock(
+                            {**expected, "time_status": 2}
+                        )
                         values = await adapter.read_clock()
                         record["clock"] = {
                             **clock_report(values, timezone, dt_util.utcnow()),
                             "before_synchronization": before,
+                            "write_acknowledged": acknowledged is not False,
                         }
                     await self._save(zone_id, record)
                     return self.snapshot(zone_id, details=True)

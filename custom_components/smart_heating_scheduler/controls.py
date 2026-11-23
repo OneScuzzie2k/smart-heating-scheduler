@@ -523,6 +523,56 @@ class Controls(InsightControls):
                 self._command_state.pop(zone_id, None)
             elif action == "retry":
                 self._command_state.pop(zone_id, None)
+            elif action == "thermostat_mode":
+                mode = payload.get("mode")
+                if mode not in {"manual", "off"}:
+                    raise ValidationError("Choose Manual or Off; use Resume for Schedule")
+                if not self.repository.control_enabled or not zone.enabled:
+                    raise ValidationError("Enable heating control and this zone first")
+                if not observation.available or not observation.supported:
+                    raise ValidationError("An available, supported thermostat is required")
+                if (
+                    observation.external_boost
+                    or observation.boost_unknown
+                    or data["external_operation"]
+                ):
+                    raise ValidationError("Finish external boost ownership before changing mode")
+                if data["boost"] and mode != "off":
+                    raise ValidationError("Stop boost before selecting Manual")
+                target = zone.limits.validate(payload.get("target")) if mode == "manual" else None
+                native = self.receivers.owner.record(zone_id)
+                if mode == "off":
+                    data["boost"] = None
+                    await self.repository.smart_save(zone_id, data, zone.limits)
+                await self.controller.resume(zone)
+                if native:
+                    await self.receivers.owner.set_mode(zone_id, mode, target)
+                else:
+                    week, _, _ = self.repository.read(zone_id, zone.limits)
+                    expiry = (
+                        week.next_boundary(now, self.controller.timezone)
+                        if mode == "manual" and zone.manual_policy == "next_period"
+                        else now + timedelta(minutes=zone.manual_minutes)
+                        if mode == "manual" and zone.manual_policy == "duration"
+                        else None
+                    )
+                    await self.repository.save_hold(
+                        zone_id, Hold(mode, target, expiry), zone.limits
+                    )
+                    await self._call(
+                        "climate",
+                        "set_hvac_mode",
+                        {
+                            "entity_id": self.mappings[zone_id][0],
+                            "hvac_mode": "heat" if mode == "manual" else "off",
+                        },
+                    )
+                    if mode == "manual":
+                        await self._call(
+                            "climate",
+                            "set_temperature",
+                            {"entity_id": self.mappings[zone_id][0], "temperature": target},
+                        )
             elif action == "resume":
                 if not zone.enabled:
                     raise ValidationError("Enable zone scheduling before resuming it")

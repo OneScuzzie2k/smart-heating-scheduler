@@ -124,6 +124,21 @@ class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
             await self.runtime.async_evaluate()
             self.assertEqual(adapter.state["mode"], "off")
             self.assertIsNone(self.runtime.smart_record(zone.id)["boost"])
+            await self.runtime.async_control_action(
+                "thermostat_mode", zone.id, {"mode": "manual", "target": 18}
+            )
+            self.assertEqual(adapter.state["mode"], "manual")
+            self.assertEqual(adapter.state["target"], 1800)
+            await self.runtime.async_control_action("resume", zone.id, {})
+            self.assertEqual(adapter.state["mode"], "schedule")
+            await self.runtime.async_control_action(
+                "boost_start", zone.id, {"target": 22, "minutes": 10}
+            )
+            await self.runtime.async_control_action("thermostat_mode", zone.id, {"mode": "off"})
+            self.assertEqual(adapter.state["mode"], "off")
+            self.assertIsNone(self.runtime.smart_record(zone.id)["boost"])
+            await self.runtime.async_control_action("resume", zone.id, {})
+            self.assertEqual(adapter.state["mode"], "schedule")
         self.assertEqual(self.calls, [])  # No generic weekly climate writer was used.
 
     async def test_native_qualification_modes_are_not_recorded_as_manual_temperature_changes(self):
@@ -866,6 +881,39 @@ class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
             "zone_a",
             {"policy": policy, "revision": self.runtime.smart_record("zone_a")["policy_revision"]},
         )
+
+    async def test_card_modes_are_guarded_and_generic_manual_off_resume_work(self):
+        await self.configure_builtin()
+        self.simulated_receiver()
+        with self.assertRaises(ValidationError):
+            await self.runtime.async_control_action(
+                "thermostat_mode", "zone_a", {"mode": "manual", "target": 20}
+            )
+        await self.enable_control()
+        await self.runtime.async_control_action(
+            "thermostat_mode", "zone_a", {"mode": "manual", "target": 20}
+        )
+        self.assertEqual(self.hass.states.get("climate.test_zone").attributes["temperature"], 20)
+        self.assertEqual(
+            self.runtime.repository.read("zone_a", self.runtime.zones["zone_a"].limits)[1].kind,
+            "manual",
+        )
+        await self.runtime.async_control_action("boost_start", "zone_a", {"target": 23})
+        await self.runtime.async_control_action("thermostat_mode", "zone_a", {"mode": "off"})
+        self.assertEqual(self.hass.states.get("climate.test_zone").state, "off")
+        self.assertIsNone(self.runtime.smart_record("zone_a")["boost"])
+        await self.runtime.async_control_action("resume", "zone_a", {})
+        self.assertEqual(self.hass.states.get("climate.test_zone").state, "heat")
+
+    async def test_card_mode_invalid_target_never_commands_a_thermostat(self):
+        await self.configure_builtin()
+        self.simulated_receiver()
+        await self.enable_control()
+        self.calls.clear()
+        for payload in ({"mode": "bogus"}, {"mode": "manual", "target": 99}, {"mode": "manual"}):
+            with self.assertRaises(ValidationError):
+                await self.runtime.async_control_action("thermostat_mode", "zone_a", payload)
+        self.assertEqual(self.calls, [])
 
     async def enable_control(self):
         await self.runtime.async_control_action(

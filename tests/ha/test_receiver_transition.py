@@ -4,7 +4,7 @@ import unittest
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from zoneinfo import ZoneInfo
 
 try:
@@ -148,6 +148,22 @@ class TransitionTests(ReceiverFixture, unittest.IsolatedAsyncioTestCase):
         self.assertEqual(q["state"], "restored")
         self.assertEqual(self.adapter.schedule, self.original)
         self.assertEqual(self.adapter.state["mode"], "manual")
+
+    async def test_clock_partial_acknowledgement_still_requires_matching_fresh_read(self):
+        self.zone.enabled = False
+        self.adapter.synchronize_clock = AsyncMock(return_value=False)
+        result = await self.run_action(
+            "synchronize_clock", acknowledgement="SYNCHRONIZE RECEIVER CLOCK"
+        )
+        self.assertTrue(result["clock"]["verified"])
+        self.assertFalse(result["clock"]["write_acknowledged"])
+        values = {**expected_clock("Europe/London", NOW), "time_status": 5}
+        values["dst_shift"] = 0
+        self.adapter.read_clock = AsyncMock(return_value=values)
+        result = await self.run_action(
+            "synchronize_clock", acknowledgement="SYNCHRONIZE RECEIVER CLOCK"
+        )
+        self.assertFalse(result["clock"]["verified"])
 
     async def test_six_slot_padding_preserves_longer_other_days_during_short_test(self):
         original = [

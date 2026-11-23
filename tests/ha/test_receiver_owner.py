@@ -96,6 +96,27 @@ class OwnerTests(ReceiverFixture, unittest.IsolatedAsyncioTestCase):
             self.assertEqual(self.adapter.state["target"], 1600)
             self.adapter.now = NOW
 
+    async def test_explicit_modes_interrupt_owned_overlay_and_resume_verified_schedule(self):
+        await self.enable()
+        await self.write(20, "occupied_comfort")
+        await self.manager.owner.set_mode("a", "off")
+        self.assertEqual(self.adapter.state["mode"], "off")
+        self.assertIsNone(self.manager.owner.record("a")["lease"])
+        await self.manager.owner.set_mode("a", "manual", 18)
+        self.assertEqual(self.adapter.state["mode"], "manual")
+        self.assertEqual(self.adapter.state["target"], 1800)
+        await self.manager.owner.resume("a")
+        self.assertEqual(self.adapter.state["mode"], "schedule")
+        self.assertEqual(self.adapter.state["target"], 1600)
+
+    async def test_explicit_mode_cannot_cancel_an_unowned_receiver_boost(self):
+        await self.enable()
+        self.adapter.state.update(mode="boost", system=5, hold=1, target=2200, duration=30)
+        count = len(self.adapter.mode_writes)
+        with self.assertRaises(ValidationError):
+            await self.manager.owner.set_mode("a", "off")
+        self.assertEqual(len(self.adapter.mode_writes), count)
+
     async def test_restart_reuses_lease_but_external_manual_off_and_changed_boost_win(self):
         await self.enable()
         await self.write(20, "preheat")
