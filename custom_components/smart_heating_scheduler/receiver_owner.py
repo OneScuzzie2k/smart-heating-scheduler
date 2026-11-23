@@ -11,6 +11,7 @@ from datetime import timedelta
 
 from homeassistant.util import dt as dt_util
 
+from .const import DAYS
 from .engine import ValidationError, Week, timestamp
 from .native_receiver import boost_attributes, current_target, validate_state
 from .native_schedule import changes, digest, from_week, to_week, validate_native
@@ -156,6 +157,10 @@ class ReceiverOwner:
                         )
                     native = from_week(week.to_dict(), zone.limits, self.runtime.mappings[zid][2])
                     actual = validate_native(await adapter.read())
+                    if getattr(adapter, "read_counts", {}) != dict.fromkeys(DAYS, 6):
+                        raise ValidationError(
+                            "Copy the complete week with six wire slots before handover"
+                        )
                     if actual != native:
                         raise ValidationError(
                             "Copy and verify the saved HA week on this receiver before handover"
@@ -529,6 +534,11 @@ class ReceiverOwner:
             ):
                 raise RevisionConflict("Receiver or schedule needs review; reload before saving")
             before = await adapter.read()
+            if getattr(adapter, "read_counts", {}) != dict.fromkeys(DAYS, 6):
+                raise ValidationError(
+                    "Receiver slot count changed; return to HA ownership "
+                    "and copy the complete week first"
+                )
             if before != owner["week"]:
                 raise RevisionConflict("Receiver week changed elsewhere; read and compare it first")
             owner.update(state="writing_week", pending_week=after)

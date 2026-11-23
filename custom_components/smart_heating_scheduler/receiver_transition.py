@@ -176,7 +176,9 @@ class ReceiverTransition:
             self.schedule(zid)
             try:
                 self.check(zid, authorize, q, write=True)
-                await adapter.write_day(q["day"], q["test_week"][q["day"]])
+                for day in DAYS:
+                    self.check(zid, authorize, q, write=True)
+                    await adapter.write_day(day, q["test_week"][day])
                 if await adapter.read() != q["test_week"]:
                     raise ValidationError("Temporary timetable readback did not match")
                 self.check(zid, authorize, q, write=True)
@@ -252,7 +254,9 @@ class ReceiverTransition:
             await self.manager._save(zid, record)
             self.check(zid, authorize, q, write=True)
             if week != q["before"]:
-                await adapter.write_day(q["day"], q["before"][q["day"]])
+                for day in DAYS:
+                    self.check(zid, authorize, q, write=True)
+                    await adapter.write_day(day, q["before"][day])
             if await adapter.read() != q["before"]:
                 raise ValidationError("Original timetable restoration is unverified")
             self.check(zid, authorize, q, write=True)

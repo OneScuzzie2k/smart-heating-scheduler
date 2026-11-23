@@ -72,13 +72,34 @@ class Controls(InsightControls):
     async def _smart_evaluate(self, zone, observation, now):
         native_owner = self.receivers.owner.record(zone.id)
         if native_owner:
-            await self.receivers.owner.observe(zone, now)
+            native_state = await self.receivers.owner.observe(zone, now)
+            # The climate entity snapshot was captured BEFORE this radio read.
+            # A just-pressed physical Off/Manual must win even if HA's entity
+            # callback has not run yet. Never reinterpret it as a new HA boost
+            # deliberately requested from Off or Manual.
+            interrupted = (
+                native_owner.get("lease")
+                and native_state["mode"] != "schedule"
+                and not self.receivers.owner.owned_boost(native_owner, native_state)
+            )
+            if interrupted:
+                interrupted_data = self.smart_record(zone.id)
+                if interrupted_data["boost"]:
+                    interrupted_data["boost"] = None
+                    await self.repository.smart_save(zone.id, interrupted_data, zone.limits)
+            observation = replace(
+                observation,
+                mode="off" if native_state["mode"] == "off" else "heat",
+                target=native_state["target"] / 100,
+            )
         data = self.smart_record(zone.id)
         original = self.smart_record(zone.id)
         policy = data["policy"]
         entity_state = self.hass.states.get(self.mappings[zone.id][0])
         context = entity_state.context if entity_state else None
         owned = context and (context.id in self._contexts or context.parent_id in self._contexts)
+        if native_owner and native_state["mode"] == "off":
+            owned = False
         pending = self._command_state.get(zone.id)
         if pending and pending[0] == (
             observation.mode,

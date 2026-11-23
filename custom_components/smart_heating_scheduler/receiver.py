@@ -85,7 +85,7 @@ class ReceiverSchedules:
                     if transaction["state"] not in {"writing", "verified", "uncertain"}:
                         raise ValidationError("Invalid receiver transaction state")
                     if not isinstance(transaction["attempted_days"], list) or any(
-                        day not in transaction["changed_days"]
+                        day not in transaction.get("write_days", transaction["changed_days"])
                         for day in transaction["attempted_days"]
                     ):
                         raise ValidationError("Invalid attempted receiver days")
@@ -119,6 +119,8 @@ class ReceiverSchedules:
             or plan["changed_days"] != native.changes(plan["before"], plan["after"])
         ):
             raise ValidationError("Invalid receiver preview metadata")
+        if "write_days" in plan and plan["write_days"] != list(native.DAYS):
+            raise ValidationError("Receiver slot normalisation must include all seven days")
 
     def snapshot(self, zone_id, *, details=False):
         record = deepcopy(self.data["zones"].get(zone_id, {}))
@@ -246,7 +248,10 @@ class ReceiverSchedules:
                     timezone = self.runtime.hass.config.time_zone
                     before = await adapter.read_clock()
                     record = self._record(zone_id)
+                    original_clock = record.get("clock", {}).get("before_synchronization")
                     record["clock"] = clock_report(before, timezone, dt_util.utcnow())
+                    if original_clock is not None:
+                        record["clock"]["before_synchronization"] = original_clock
                     if action == "synchronize_clock":
                         record["clock"]["before_synchronization"] = before
                         await self._save(zone_id, record)
@@ -300,6 +305,7 @@ class ReceiverSchedules:
             "identity": adapter.identity,
             "schedule": schedule,
             "digest": native.digest(schedule),
+            "wire_counts": getattr(adapter, "read_counts", {}),
         }
         try:
             snapshot["import_week"] = native.to_week(schedule, zone.limits)
@@ -355,6 +361,7 @@ class ReceiverSchedules:
             "before": before,
             "after": after,
             "changed_days": native.changes(before, after),
+            "write_days": list(native.DAYS),
         }
         await self._save(zone_id, record)
         return self.snapshot(zone_id, details=True)
@@ -392,7 +399,7 @@ class ReceiverSchedules:
         record["transactions"] = [*record.get("transactions", []), transaction][-5:]
         await self._save(zone_id, record)
         try:
-            for day in plan["changed_days"]:
+            for day in plan.get("write_days", plan["changed_days"]):
                 self._check(
                     zone_id, authorize, write=True, revision=plan["revision"], mapping=mapping
                 )

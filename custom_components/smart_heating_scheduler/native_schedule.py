@@ -107,11 +107,17 @@ def changes(before, after):
 
 def command(day, periods):
     clean = validate_native({day: periods}, complete=False)[day]
+    if not clean:
+        raise ValidationError("Empty receiver days cannot be written safely")
+    # OTR1 shares the last written sequence count across its entire week.
+    # Always preserve six wire slots. Repeating the FINAL identical time and
+    # target adds no new boundary; readback canonicalisation removes repeats.
+    padded = [*clean, *[clean[-1]] * (MAX_TRANSITIONS - len(clean))]
     return {
-        "num_transitions_for_sequence": len(clean),
+        "num_transitions_for_sequence": MAX_TRANSITIONS,
         "day_of_week_for_sequence": DAY_BITS[day],
         "mode_for_sequence": 1,
-        "values": [value for period in clean for value in (period["minute"], period["centi"])],
+        "values": [value for period in padded for value in (period["minute"], period["centi"])],
     }
 
 
@@ -121,6 +127,7 @@ class ScheduleReplies:
     def __init__(self, tsn):
         self.tsn = tsn
         self.days = {}
+        self.counts = {}
         self.error = None
 
     def accept(self, tsn, command_id, args):
@@ -149,6 +156,7 @@ class ScheduleReplies:
                 if day in self.days and self.days[day] != clean:
                     raise ValidationError("Receiver sent conflicting replies for one day")
                 self.days[day] = deepcopy(clean)
+                self.counts[day] = count
         except (AttributeError, TypeError, ValueError) as err:
             self.error = str(err)
 

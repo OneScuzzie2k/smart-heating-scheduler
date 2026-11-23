@@ -41,6 +41,7 @@ class SimulatedReceiver:
     def __init__(self, schedule):
         self.identity = {"ieee": "test", "endpoint": 5, "transport": "zha"}
         self.schedule = deepcopy(schedule)
+        self.read_counts = {day: 6 for day in DAYS}
         self.writes = []
         self.read_hook = None
         self.write_hook = None
@@ -116,7 +117,7 @@ class ReceiverWorkflowTests(ReceiverFixture, unittest.IsolatedAsyncioTestCase):
         self.zone.enabled = False
         result = await self.write(plan)
         self.assertEqual(result["state"], "verified")
-        self.assertEqual(self.adapter.writes, ["mon"])
+        self.assertEqual(self.adapter.writes, list(DAYS))
         self.assertEqual(result["transactions"][0]["before"], self.original)
         restore = await self.run_action("prepare_restore", revision=1, backup_id=plan["id"])
         await self.write(restore["plan"])

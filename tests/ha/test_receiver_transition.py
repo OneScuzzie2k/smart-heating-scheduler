@@ -15,6 +15,7 @@ except ImportError as error:
 from custom_components.smart_heating_scheduler.const import DAYS
 from custom_components.smart_heating_scheduler.engine import ValidationError
 from custom_components.smart_heating_scheduler.native_receiver import current_target
+from custom_components.smart_heating_scheduler.native_schedule import command, validate_native
 from custom_components.smart_heating_scheduler.receiver_clock import clock_report, expected_clock
 from custom_components.smart_heating_scheduler.receiver_transition import ACK
 from tests.ha.test_receiver import ReceiverFixture
@@ -77,10 +78,37 @@ class BoundaryReceiver(NativeReceiver):
             self.state.update(mode="off", system=0, hold=0)
 
 
+class SharedCountReceiver(BoundaryReceiver):
+    """Observed OTR1 behaviour: last written count governs all seven reads."""
+
+    def __init__(self, week):
+        super().__init__(week)
+        self.wire = {
+            day: [*values, *[values[-1]] * (6 - len(values))] for day, values in week.items()
+        }
+        self.count = 6
+
+    async def read(self):
+        self.read_counts = dict.fromkeys(DAYS, self.count)
+        self.schedule = validate_native(
+            {day: values[: self.count] for day, values in self.wire.items()}
+        )
+        return deepcopy(self.schedule)
+
+    async def write_day(self, day, periods):
+        payload = command(day, periods)
+        self.count = payload["num_transitions_for_sequence"]
+        self.wire[day] = [
+            {"minute": payload["values"][i], "centi": payload["values"][i + 1]}
+            for i in range(0, len(payload["values"]), 2)
+        ]
+        self.writes.append(day)
+
+
 class TransitionTests(ReceiverFixture, unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         await super().asyncSetUp()
-        self.adapter = BoundaryReceiver({d: [{"minute": 0, "centi": 1600}] for d in DAYS})
+        self.adapter = SharedCountReceiver({d: [{"minute": 0, "centi": 1600}] for d in DAYS})
         self.manager.factory = lambda *_: self.adapter
         self.runtime.hass = SimpleNamespace(config=SimpleNamespace(time_zone="Europe/London"))
         self.manager.transition.schedule = lambda *_: None
@@ -120,6 +148,21 @@ class TransitionTests(ReceiverFixture, unittest.IsolatedAsyncioTestCase):
         self.assertEqual(q["state"], "restored")
         self.assertEqual(self.adapter.schedule, self.original)
         self.assertEqual(self.adapter.state["mode"], "manual")
+
+    async def test_six_slot_padding_preserves_longer_other_days_during_short_test(self):
+        original = [
+            {"minute": m, "centi": t}
+            for m, t in ((390, 2000), (510, 100), (720, 100), (840, 100), (990, 2000), (1320, 100))
+        ]
+        self.adapter = SharedCountReceiver(dict.fromkeys(DAYS, original))
+        self.adapter.now = NOW
+        await self.start()
+        read = await self.adapter.read()
+        self.assertEqual(read["tue"], original)
+        self.assertEqual(len(read["mon"]), 3)
+        self.assertEqual(self.adapter.count, 6)
+        await self.run_action("restore_transition")
+        self.assertEqual(await self.adapter.read(), dict.fromkeys(DAYS, original))
 
     async def test_missed_first_transition_never_passes_on_recovery(self):
         await self.start()

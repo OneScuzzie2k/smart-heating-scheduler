@@ -39,7 +39,9 @@ class ZhaReceiver:
     async def synchronize_clock(self, values):
         # LocalTime is computed/read-only. Do not touch reporting/bindings.
         values = validate_clock({**values, "local_time": values.get("local_time", 0)})
-        attributes = {key: value for key, value in values.items() if key != "local_time"}
+        attributes = {
+            key: value for key, value in values.items() if key not in {"local_time", "time_status"}
+        }
         try:
             async with asyncio.timeout(self.timeout):
                 result = await self.cluster.endpoint.in_clusters[0x000A].write_attributes(
@@ -112,6 +114,7 @@ class ZhaReceiver:
             self.cluster.remove_listener(listener)
         if not replies.complete:
             raise ValidationError(replies.error or "Incomplete receiver read")
+        self.read_counts = dict(replies.counts)
         return replies.days
 
     async def write_day(self, day, periods):

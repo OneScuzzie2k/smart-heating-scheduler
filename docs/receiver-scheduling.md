@@ -185,3 +185,26 @@ paused while receiver ownership is active. To roll back or downgrade, pause the 
 finish boosts/leases, choose Return to HA scheduling and verify Manual mode, then
 re-enable the zone and any reviewed legacy hold adapter. Do not downgrade while an
 ownership marker is active: older builds cannot understand the new fail-closed marker.
+
+
+### Live receiver fixes in 0.6.0-dev.4
+
+A supervised OTR1 check found that writing a shorter sequence changes the count
+returned for every day. All commands now carry six slots, padding by repeating the
+final identical time and target (no new switching time). Manual copies and transition
+qualification normalize/write all seven days and verify the whole week. Ordinary
+receiver-owned edits still write changed days, after a fresh six-slot count check.
+The handover refuses a receiver whose seven fresh counts are not all six.
+
+Clock synchronization preserves the receiver's master/synchronization status and
+writes only Time, TimeZone and the three DST fields. LocalTime and TimeStatus are
+read back; they are not forced writable. The OTR1 reported master status 5 while
+its fresh time/local-time and next DST rules were correct after the first sync.
+The most recent pre-sync clock values survive later clock reads.
+
+A fresh physical Off/Manual or different native boost interrupts an HA-owned native
+boost even if HA's climate entity callback is still one update behind. This is
+covered by the complete HA rule-pipeline test.
+
+Do not use dev.3 for receiver handover; use dev.4 or later. Existing HA-owned
+schedules remain supported and no owner changes happen automatically.

@@ -114,6 +114,16 @@ class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
             await self.runtime.async_evaluate()
             self.assertEqual(adapter.state["mode"], "schedule")
             self.assertEqual(adapter.state["target"], 1600)
+            await self.runtime.async_control_action(
+                "boost_start", zone.id, {"target": 22, "minutes": 10}
+            )
+            self.assertEqual(adapter.state["mode"], "boost")
+            # Physical Off is already fresh on the radio while HA's climate
+            # entity deliberately still says Heat. It must cancel this boost.
+            adapter.state.update(mode="off", system=0, hold=0)
+            await self.runtime.async_evaluate()
+            self.assertEqual(adapter.state["mode"], "off")
+            self.assertIsNone(self.runtime.smart_record(zone.id)["boost"])
         self.assertEqual(self.calls, [])  # No generic weekly climate writer was used.
 
     async def test_native_qualification_modes_are_not_recorded_as_manual_temperature_changes(self):

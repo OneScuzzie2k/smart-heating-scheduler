@@ -79,7 +79,8 @@ class NativeConversionTests(unittest.TestCase):
         payload = command("mon", raw["mon"])
         self.assertEqual(payload["day_of_week_for_sequence"], 2)
         self.assertEqual(payload["mode_for_sequence"], 1)
-        self.assertEqual(payload["num_transitions_for_sequence"], 5)
+        self.assertEqual(payload["num_transitions_for_sequence"], 6)
+        self.assertEqual(payload["values"][-4:], [1320, 1600, 1320, 1600])
         self.assertEqual(payload["values"][:4], [0, 1600, 390, 2000])
         edited = deepcopy(raw)
         edited["tue"][1]["centi"] = 2100

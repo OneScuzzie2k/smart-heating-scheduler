@@ -93,6 +93,32 @@ class NativeStateTests(unittest.TestCase):
 
 
 class NativeModeTransportTests(unittest.IsolatedAsyncioTestCase):
+    async def test_clock_write_never_tries_to_override_receiver_master_status(self):
+        writes = []
+
+        async def write(attrs):
+            writes.append(attrs)
+            return ([SimpleNamespace(status=0)],)
+
+        clock = SimpleNamespace(write_attributes=write)
+        adapter = ZhaReceiver(
+            SimpleNamespace(endpoint=SimpleNamespace(in_clusters={10: clock})), {}
+        )
+        await adapter.synchronize_clock(
+            {
+                "time": 848759153,
+                "time_status": 2,
+                "time_zone": 0,
+                "dst_start": 859510800,
+                "dst_end": 878259599,
+                "dst_shift": 3600,
+                "local_time": 848759153,
+            }
+        )
+        self.assertNotIn("time_status", writes[0])
+        self.assertNotIn("local_time", writes[0])
+        self.assertEqual(set(writes[0]), {"time", "time_zone", "dst_start", "dst_end", "dst_shift"})
+
     async def test_fresh_attributes_and_one_combined_boost_frame(self):
         calls = []
 
