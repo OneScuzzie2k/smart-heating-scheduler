@@ -1,4 +1,12 @@
-# 0.6.0-dev.1 — receiver schedule foundation (unreleased)
+# 0.6.0-dev.2 — guarded native timer qualification
+
+- Inspect actual receiver Schedule/Manual/Off/Boost attributes separately from HA's heat/off state.
+- Admin-only two-minute native timer test at the unchanged Manual target, with fresh-read preflight, durable original-state backup, readback, native expiry observation and exact hold restoration.
+- Persist and reconcile interrupted tests after integration/Core reload. Missing/invalid countdowns and watchdog cancellation never count as successful hardware expiry.
+- Ignore test-owned observations when detecting manual temperature changes; prevent re-enabling a zone during an active test.
+- Receiver ownership remains unavailable. The first supervised OTR1 timetable copy and original restoration both passed seven-day readback; broader hardware acceptance remains in progress.
+
+# 0.6.0-dev.1 — receiver schedule foundation
 
 - Optional heating-only Hive/ZHA timetable read, compare, guarded copy and backup restore.
 - Durable before/after backups and seven-day readback verification; interrupted copies remain unresolved after restart.

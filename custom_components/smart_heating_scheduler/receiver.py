@@ -1,8 +1,8 @@
-"""Staged receiver read/write with durable backups; no ownership or mode switch.
+"""Staged receiver read/write and bounded timer qualification with durable backups.
 
 An administrator may inspect a running zone. Hardware writes require a disabled
 zone, a fresh reviewed preview and a matching read of the original timetable.
-This stage intentionally cannot enable receiver ownership or timed overlays.
+Permanent receiver ownership and everyday timed overlays are not enabled here.
 """
 
 from __future__ import annotations
@@ -17,6 +17,8 @@ from homeassistant.util import dt as dt_util
 
 from . import native_schedule as native
 from .engine import ValidationError, timestamp
+from .native_receiver import validate_state
+from .receiver_qualification import ReceiverQualification, validate_qualification
 from .receiver_zha import find_receiver
 from .repository import RevisionConflict
 
@@ -31,6 +33,7 @@ class ReceiverSchedules:
         self.locks = {}
         self.tasks = set()
         self._storage_lock = asyncio.Lock()
+        self.qualification = ReceiverQualification(self)
 
     async def load(self):
         try:
@@ -50,6 +53,8 @@ class ReceiverSchedules:
                     "snapshot",
                     "plan",
                     "transactions",
+                    "hardware",
+                    "qualification",
                 }:
                     raise ValidationError("Invalid receiver backup record")
                 if any(
@@ -77,6 +82,11 @@ class ReceiverSchedules:
                         for day in transaction["attempted_days"]
                     ):
                         raise ValidationError("Invalid attempted receiver days")
+                if "hardware" in record:
+                    timestamp(record["hardware"]["at"])
+                    validate_state(record["hardware"]["state"])
+                if "qualification" in record:
+                    validate_qualification(record["qualification"])
             self.data = deepcopy(data)
         except (ValidationError, KeyError, TypeError, OSError, AttributeError, HomeAssistantError):
             # Optional receiver inspection must not break existing HA schedules.
@@ -115,6 +125,26 @@ class ReceiverSchedules:
             "read_at": record.get("snapshot", {}).get("at"),
             "backup_count": len(transactions),
         }
+        q = record.get("qualification")
+        result["qualification"] = (
+            {
+                key: q.get(key)
+                for key in (
+                    "state",
+                    "result",
+                    "error",
+                    "expiry_passed",
+                    "schedule_target_verified",
+                    "restoration_verified",
+                    "deadline",
+                    "updated_at",
+                )
+            }
+            if q
+            else None
+        )
+        if q and q.get("observations"):
+            result["qualification"]["latest"] = q["observations"][-1]
         if details:
             result.update(record)
         return result
@@ -153,6 +183,8 @@ class ReceiverSchedules:
 
     async def _save(self, zone_id, record):
         async with self._storage_lock:
+            if q := record.get("qualification"):
+                q["updated_at"] = dt_util.utcnow().isoformat()
             candidate = deepcopy(self.data)
             candidate["zones"][zone_id] = deepcopy(record)
             await self.store.async_save(candidate)
@@ -167,6 +199,16 @@ class ReceiverSchedules:
         try:
             async with self.locks.setdefault(zone_id, asyncio.Lock()):
                 self._check(zone_id, authorize)
+                if action in {
+                    "inspect",
+                    "prepare_test",
+                    "start_test",
+                    "check_test",
+                    "restore_test",
+                }:
+                    return await self.qualification.execute(zone_id, action, payload, authorize)
+                if self.qualification.active(zone_id) and action != "read":
+                    raise ValidationError("Finish or restore the active receiver timer test first")
                 if action == "read":
                     return await self._read(zone_id, authorize)
                 if action in {"prepare", "prepare_restore"}:
@@ -314,5 +356,6 @@ class ReceiverSchedules:
         return self.snapshot(zone_id, details=True)
 
     def close(self):
+        self.qualification.close()
         for task in tuple(self.tasks):
             task.cancel()

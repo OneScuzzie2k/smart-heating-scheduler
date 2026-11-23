@@ -34,6 +34,27 @@ from custom_components.smart_heating_scheduler.sensor import async_setup_entry a
 
 
 class HomeAssistantRuntimeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_native_qualification_modes_are_not_recorded_as_manual_temperature_changes(self):
+        from dataclasses import replace
+
+        await self.configure_builtin()
+        zone = self.runtime.zones["zone_a"]
+        self.runtime.zones[zone.id] = replace(zone, enabled=False)
+        with patch.object(
+            self.runtime.receivers.qualification, "owns_observation", return_value=True
+        ):
+            self.hass.states.async_set(
+                "climate.test_zone", "heat", {**self.attrs, "temperature": 1}
+            )
+            await self.runtime.async_evaluate()
+            self.assertEqual(self.runtime.status[zone.id]["source"], "disabled")
+            self.hass.states.async_set(
+                "climate.test_zone", "heat", {**self.attrs, "temperature": 20}
+            )
+            await self.runtime.async_evaluate()
+        self.assertIsNone(self.runtime.repository.read(zone.id, zone.limits)[1])
+        self.assertEqual(self.calls, [])
+
     async def test_frost_input_bound_aligns_with_hardware_step_grid(self):
         await self.configure_builtin()
         self.hass.states.async_set("climate.test_zone", "off", {**self.attrs, "min_temp": 5.1})

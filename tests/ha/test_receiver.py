@@ -57,7 +57,7 @@ class SimulatedReceiver:
         self.schedule[day] = deepcopy(periods)
 
 
-class ReceiverWorkflowTests(unittest.IsolatedAsyncioTestCase):
+class ReceiverFixture:
     async def asyncSetUp(self):
         self.limits = Limits(16, 32, 0.5)
         self.week = {
@@ -99,6 +99,8 @@ class ReceiverWorkflowTests(unittest.IsolatedAsyncioTestCase):
             "write", plan_id=plan["id"], acknowledgement=WRITE_ACKNOWLEDGEMENT
         )
 
+
+class ReceiverWorkflowTests(ReceiverFixture, unittest.IsolatedAsyncioTestCase):
     async def test_read_is_readonly_and_preserves_app_schedule(self):
         result = await self.run_action("read")
         self.assertEqual(result["state"], "read_complete")

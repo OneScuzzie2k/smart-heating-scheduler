@@ -158,6 +158,7 @@ class Runtime(Controls):
                     self.hass, tracked, self._registry_changed
                 )
             )
+        self.receivers.qualification.resume()
 
     @callback
     def _registry_changed(self, event):

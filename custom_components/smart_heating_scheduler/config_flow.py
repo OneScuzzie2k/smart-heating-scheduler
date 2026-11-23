@@ -369,6 +369,12 @@ class ZoneSubentryFlow(ConfigSubentryFlow):
                     subentry.subentry_id if subentry else None,
                 )
                 if subentry:
+                    if data["enabled"] and entry.runtime_data.receivers.qualification.active(
+                        subentry.subentry_id
+                    ):
+                        raise ValidationError(
+                            "Restore the active receiver timer test before enabling this zone"
+                        )
                     # A device or units change must not reuse old numeric schedules.
                     old_identity = (
                         subentry.data.get("climate_registry_id") or subentry.data["climate_entity"]

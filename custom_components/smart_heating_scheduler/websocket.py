@@ -337,7 +337,19 @@ async def control_action(hass, connection, msg):
         vol.Required("type"): f"{DOMAIN}/receiver",
         vol.Required("entry_id"): str,
         vol.Required("zone_id"): str,
-        vol.Required("action"): vol.In(["read", "prepare", "prepare_restore", "write"]),
+        vol.Required("action"): vol.In(
+            [
+                "read",
+                "prepare",
+                "prepare_restore",
+                "write",
+                "inspect",
+                "prepare_test",
+                "start_test",
+                "check_test",
+                "restore_test",
+            ]
+        ),
         vol.Required("payload"): dict,
     }
 )
@@ -352,6 +364,11 @@ async def receiver_action(hass, connection, msg):
             "prepare": {"revision"},
             "prepare_restore": {"revision", "backup_id"},
             "write": {"plan_id", "acknowledgement"},
+            "inspect": set(),
+            "prepare_test": {"revision"},
+            "start_test": {"test_id", "acknowledgement"},
+            "check_test": set(),
+            "restore_test": set(),
         }
         if set(payload) != allowed[action]:
             raise ValidationError("Invalid receiver request fields")
@@ -362,7 +379,17 @@ async def receiver_action(hass, connection, msg):
             if zone_id not in runtime.mappings:
                 raise ValidationError("Unknown zone")
             entity_id = runtime.mappings[zone_id][0]
-            policies = (POLICY_READ, POLICY_CONTROL) if action == "write" else (POLICY_READ,)
+            policies = (
+                (POLICY_READ, POLICY_CONTROL)
+                if action
+                in {
+                    "write",
+                    "start_test",
+                    "check_test",
+                    "restore_test",
+                }
+                else (POLICY_READ,)
+            )
             if not all(connection.user.permissions.check_entity(entity_id, p) for p in policies):
                 raise Unauthorized()
 

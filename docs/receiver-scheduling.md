@@ -62,6 +62,49 @@ The reference transport is attributed in `THIRD_PARTY_NOTICES.md`.
 
 ## Stage B: hardware qualification and owner handover
 
+The development checkpoint `0.6.0-dev.2` implements a supervised native timer
+test, not permanent receiver ownership. In the card's receiver disclosure, open
+**Hardware timer qualification**:
+
+1. Inspect the actual receiver mode, then prepare the test. Preparation is
+   read-only and records the original indefinite Manual hold and native week.
+   It requires a fresh room reading at least 1°C above the unchanged Manual
+   target, and no higher native period within the next five minutes.
+2. Pause competing receiver controllers for the test window and disable only
+   this zone's HA scheduling. Review the two-minute test and type
+   `TEST RECEIVER TIMER`. Normal household boost permission does not grant
+   access to these administrator tools.
+3. The test saves the original hold before changing any modes, selects native
+   Schedule, verifies a low target, and sends all four boost attributes in one
+   frame. It requires the receiver to report Boost, the unchanged target and a
+   bounded one/two-minute countdown. Unknown/65535 countdowns are failures.
+4. HA polls for native return to Schedule before sending a restoration command.
+   Hardware expiry, agreement with the current native target, and restoration
+   of the original Manual hold are three separate results. Timer values have
+   minute resolution; observations are timestamped rather than pretending an
+   exact second was measured. An HA watchdog restore is never a hardware-expiry
+   pass. A physical Off or unrelated new manual target is not overwritten.
+5. Original state, phase, deadline and observations survive reloads. After a
+   reload/Core restart the first fresh native read is recorded *before*
+   restoration. `after_reload` includes integration reloads; this field alone
+   does not prove a Core outage. A supervised outage test needs its actual stop
+   and recovery times recorded too.
+6. Confirm original-hold restoration, restore paused automations and re-enable
+   the zone. Re-enabling is blocked while a test is active. A lost radio or
+   unverified restoration stays visible for review; do not treat it as passed.
+
+The receiver may apply its own clock/timetable when Schedule is selected. A
+fresh scheduled-target read is checked immediately and a warmer-than-reviewed
+target aborts the test. Exact clock/DST and a real scheduled boundary still
+need qualification before handover.
+
+Supervised acceptance of the foundation has confirmed timetable write and
+original restoration on one OTR1 receiver with firmware `0x01000108`: both
+operations matched a complete seven-day readback. That does not establish mode,
+timer, outage or other-model compatibility.
+
+Remaining handover acceptance:
+
 1. Take a current HA backup and export both HA weeks/settings. Inventory all
    automations that command the receivers, especially any forced-hold controller.
 2. Read both receivers without changing their mode or timetable. Verify the

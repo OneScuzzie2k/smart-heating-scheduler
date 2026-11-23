@@ -1,7 +1,8 @@
 """Optional, heating-only Hive/ZHA schedule adapter. Imports ZHA lazily.
 
 Schedule response collection follows Hive Local's MIT-licensed transport design;
-see THIRD_PARTY_NOTICES.md. This module never changes modes, holds or reporting.
+see THIRD_PARTY_NOTICES.md. Mode writes are restricted to the guarded timer test;
+reporting configuration is never changed.
 """
 
 from __future__ import annotations
@@ -9,6 +10,7 @@ from __future__ import annotations
 import asyncio
 
 from .engine import ValidationError
+from .native_receiver import STATE_ATTRIBUTES, control_attributes, receiver_state
 from .native_schedule import ScheduleReplies, command
 
 
@@ -17,6 +19,33 @@ class ZhaReceiver:
         self.cluster = cluster
         self.identity = identity
         self.timeout = timeout
+
+    async def read_state(self):
+        try:
+            async with asyncio.timeout(self.timeout):
+                values, failed = await self.cluster.read_attributes(
+                    list(STATE_ATTRIBUTES), allow_cache=False
+                )
+            if failed:
+                raise ValidationError("Receiver does not support all timer-test attributes")
+            return receiver_state(values)
+        except ValidationError:
+            raise
+        except Exception as err:
+            raise ValidationError("Fresh receiver mode read failed") from err
+
+    async def write_control(self, attributes):
+        """Internal validated mode operations, sent in ONE Write Attributes frame."""
+        attributes = control_attributes(attributes)
+        try:
+            async with asyncio.timeout(self.timeout):
+                result = await self.cluster.write_attributes(attributes)
+            if not result or any(record.status != 0 for record in result[0]):
+                raise ValidationError("Receiver rejected the mode command; verify its state")
+        except ValidationError:
+            raise
+        except Exception as err:
+            raise ValidationError("Receiver mode write is unverified") from err
 
     async def read(self):
         # Use the device's allocator (not an arbitrary constant). Ignore replies

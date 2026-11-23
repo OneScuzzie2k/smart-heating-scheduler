@@ -140,7 +140,12 @@ class Controls(InsightControls):
             zone,
             observation,
             now,
-            detect_manual=not owned and not data["boost"] and not data["external_operation"],
+            detect_manual=(
+                not owned
+                and not data["boost"]
+                and not data["external_operation"]
+                and not self.receivers.qualification.owns_observation(zone.id, now)
+            ),
             week_override=feature_week,
         )
         if base.source == "schedule" and profile_days[0]["source"] != "weekly":
